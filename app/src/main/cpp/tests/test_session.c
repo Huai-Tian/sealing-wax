@@ -517,6 +517,52 @@ static int test_state_roundtrip(void)
         swx_session_free(p2);
     }
 
+    /* role flip: mirror session decrypts our own sent frames (history walk) */
+    {
+        uint8_t mirror[SWX_STATE_BLOB_MAX];
+        swx_session *m = NULL;
+        uint8_t own[SWX_MAX_FRAME_BIN];
+        size_t own_len = 0;
+        char sa2[SWX_SAS_DIGITS + 1];
+        uint64_t sn2 = 0, hwm2 = 0;
+
+        /* a was freed above; the imported a2 carries the same inviter role */
+        CHECK(swx_session_seal_text(a2, msg2, sizeof msg2, NULL,
+                                    (char *) pieces, PIECE_STRIDE, MAX_PIECES,
+                                    &np) == SWX_OK);
+        CHECK(swx_b64_decode(own, sizeof own, &own_len, pieces[0],
+                             strlen(pieces[0])) == SWX_OK);
+        /* the peer can open it; we cannot (direction keys — the second
+         * seal keeps the counter above our receive high-water so the
+         * direction mismatch, not the replay gate, is what fires) */
+        CHECK(swx_session_open_text(b, own, own_len, NULL,
+                                    out, sizeof out, &out_len) == SWX_OK);
+        CHECK(swx_session_seal_text(a2, msg1, sizeof msg1, NULL,
+                                    (char *) pieces, PIECE_STRIDE, MAX_PIECES,
+                                    &np) == SWX_OK);
+        CHECK(swx_b64_decode(own, sizeof own, &own_len, pieces[0],
+                             strlen(pieces[0])) == SWX_OK);
+        CHECK(swx_session_open_text(a2, own, own_len, NULL,
+                                    out, sizeof out, &out_len) == SWX_E_CRYPTO);
+
+        /* re-export: the padding sub-test above reused the blob variable */
+        CHECK(swx_session_export(a2, blob, sizeof blob, &blob_len) == SWX_OK);
+        memcpy(mirror, blob, blob_len);
+        CHECK(swx_state_flip_role(mirror, blob_len) == SWX_OK);
+        CHECK(mirror[5] != blob[5]);
+        CHECK(swx_session_import(&m, mirror, blob_len, 1, 0) == SWX_OK);
+        CHECK(swx_session_role(m) == SWX_ROLE_RESPONDER);   /* a was inviter */
+        CHECK(swx_session_sas(m, sa2) == SWX_E_STATE);      /* no SAS on import */
+        CHECK(swx_session_open_text(m, own, own_len, NULL,
+                                    out, sizeof out, &out_len) == SWX_OK);
+        CHECK(out_len == sizeof msg1 && memcmp(out, msg1, sizeof msg1) == 0);
+        swx_session_free(m);
+
+        /* corrupted blob is refused */
+        mirror[9] ^= 0x11;
+        CHECK(swx_state_flip_role(mirror, blob_len) == SWX_E_IO);
+    }
+
     swx_session_free(a2);
     swx_session_free(b);
     return failures ? 1 : 0;

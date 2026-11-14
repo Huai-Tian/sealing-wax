@@ -12,6 +12,13 @@ set(SWX_SODIUM_VERSION      "1.0.22")
 set(SWX_SODIUM_LIBVER_MAJOR 26)
 set(SWX_SODIUM_LIBVER_MINOR 4)
 
+# version.h.in placeholders (host gcc passes empty macros with a warning;
+# NDK clang rejects them as errors — they must always be defined).
+set(VERSION                     "${SWX_SODIUM_VERSION}")
+set(SODIUM_LIBRARY_VERSION_MAJOR "${SWX_SODIUM_LIBVER_MAJOR}")
+set(SODIUM_LIBRARY_VERSION_MINOR "${SWX_SODIUM_LIBVER_MINOR}")
+set(SODIUM_LIBRARY_MINIMAL_DEF   "")
+
 file(GLOB_RECURSE SWX_SODIUM_SRC CONFIGURE_DEPENDS
      "${CMAKE_CURRENT_SOURCE_DIR}/src/libsodium/*.c")
 

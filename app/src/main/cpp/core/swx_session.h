@@ -159,6 +159,12 @@ int swx_session_import(swx_session **out,
                        const uint8_t *in, size_t in_len,
                        uint64_t send_next, uint64_t recv_hwm);
 
+/* Flips the role inside an exported state blob (checksum recomputed).
+ * The platform layer imports the flipped blob as a mirror session to
+ * decrypt this side's OWN stored history frames: message keys bind to
+ * direction, and direction is derived from role. */
+int swx_state_flip_role(uint8_t *blob, size_t len);
+
 #ifdef __cplusplus
 }
 #endif

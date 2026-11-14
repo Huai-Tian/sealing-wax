@@ -360,6 +360,35 @@ Java_sealing_wax_bridge_WaxNative_importState(JNIEnv *env, jclass,
     return (jlong) (intptr_t) s;
 }
 
+extern "C" JNIEXPORT jbyteArray JNICALL
+Java_sealing_wax_bridge_WaxNative_flipStateRole(JNIEnv *env, jclass,
+                                                jbyteArray blob)
+{
+    jsize len = env->GetArrayLength(blob);
+    uint8_t *copy = (uint8_t *) malloc((size_t) (len > 0 ? len : 1));
+    jbyte *buf = NULL;
+    jbyteArray out = NULL;
+    int ret = SWX_E_LEN;
+
+    if (copy == NULL) {
+        throw_swx(env, SWX_E_LEN);
+        return NULL;
+    }
+    buf = env->GetByteArrayElements(blob, NULL);
+    if (buf != NULL) {
+        memcpy(copy, buf, (size_t) len);
+        ret = swx_state_flip_role(copy, (size_t) len);
+        env->ReleaseByteArrayElements(blob, buf, JNI_ABORT);
+    }
+    if (ret != SWX_OK) {
+        throw_swx(env, ret);
+    } else {
+        out = to_bytes(env, copy, (size_t) len);
+    }
+    free(copy);
+    return out;
+}
+
 /* ---- file channel ---- */
 
 extern "C" JNIEXPORT jlong JNICALL
@@ -531,10 +560,10 @@ Java_sealing_wax_bridge_WaxNative_hashCreate(JNIEnv *env, jclass)
 
 extern "C" JNIEXPORT void JNICALL
 Java_sealing_wax_bridge_WaxNative_hashUpdate(JNIEnv *env, jclass, jlong h,
-                                             jbyteArray data)
+                                             jbyteArray data, jint offset,
+                                             jint len)
 {
-    jsize len = env->GetArrayLength(data);
-    if (len == 0) {
+    if (len <= 0 || offset < 0) {
         return;
     }
     jbyte *buf = env->GetByteArrayElements(data, NULL);
@@ -542,7 +571,7 @@ Java_sealing_wax_bridge_WaxNative_hashUpdate(JNIEnv *env, jclass, jlong h,
         return;
     }
     int ret = swx_hash_update((swx_hash *) (intptr_t) h,
-                              (const uint8_t *) buf, (size_t) len);
+                              (const uint8_t *) buf + offset, (size_t) len);
     env->ReleaseByteArrayElements(data, buf, JNI_ABORT);
     if (ret != SWX_OK) {
         throw_swx(env, ret);

@@ -909,6 +909,29 @@ int swx_session_export(const swx_session *s,
     return SWX_OK;
 }
 
+int swx_state_flip_role(uint8_t *blob, size_t len)
+{
+    uint8_t mac[16];
+
+    if (blob == NULL || len != SWX_STATE_LEN ||
+        memcmp(blob, SWX_STATE_MAGIC, 4) != 0 || blob[4] != SWX_STATE_VER) {
+        return SWX_E_IO;
+    }
+    crypto_generichash(mac, 16, blob, 44, NULL, 0);
+    if (memcmp(mac, blob + 44, 16) != 0) {
+        return SWX_E_IO;
+    }
+    if (blob[5] == SWX_ROLE_INVITER) {
+        blob[5] = SWX_ROLE_RESPONDER;
+    } else if (blob[5] == SWX_ROLE_RESPONDER) {
+        blob[5] = SWX_ROLE_INVITER;
+    } else {
+        return SWX_E_IO;
+    }
+    crypto_generichash(blob + 44, 16, blob, 44, NULL, 0);
+    return SWX_OK;
+}
+
 int swx_session_import(swx_session **out,
                        const uint8_t *in, size_t in_len,
                        uint64_t send_next, uint64_t recv_hwm)

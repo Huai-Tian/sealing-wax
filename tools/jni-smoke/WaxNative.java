@@ -17,6 +17,7 @@ public class WaxNative {
     public static native byte[] openText(long h, String pieceB64);
     public static native byte[] exportState(long h);
     public static native long importState(byte[] blob, long sendNext, long recvHwm);
+    public static native byte[] flipStateRole(byte[] blob);
     public static native long fileSealBegin(long h, byte[] meta, long fileSize);
     public static native int fileChunkRoom(long se);
     public static native byte[] fileSealChunk(long se, byte[] data);
@@ -26,7 +27,7 @@ public class WaxNative {
     public static native byte[] lastFp(long h);
     public static native long[] lastFrame(long h);
     public static native long hashCreate();
-    public static native void hashUpdate(long h, byte[] data);
+    public static native void hashUpdate(long h, byte[] data, int offset, int len);
     public static native byte[] hashFinal(long h);
     public static native void hashFree(long h);
 }

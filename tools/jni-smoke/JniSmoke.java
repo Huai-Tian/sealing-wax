@@ -56,6 +56,16 @@ public class JniSmoke {
             check("SWX_E_REPLAY".equals(e.getMessage()), "replay code " + e.getMessage());
         }
 
+        /* role flip: mirror session opens our own frames */
+        byte[] blob0 = WaxNative.exportState(a);
+        byte[] mirrorBlob = WaxNative.flipStateRole(blob0);
+        check(mirrorBlob.length == 60 && mirrorBlob[5] != blob0[5], "flip role byte");
+        long mirror = WaxNative.importState(mirrorBlob, 1, 0);
+        check(WaxNative.sessionRole(mirror) == 2, "mirror role");
+        String[] own = WaxNative.sealText(a, "own frame".getBytes("UTF-8"));
+        check(java.util.Arrays.equals(WaxNative.openText(mirror, own[0]), "own frame".getBytes("UTF-8")), "mirror opens own frame");
+        WaxNative.freeSession(mirror);
+
         /* state export/import */
         long[] cA = WaxNative.counters(a);
         byte[] blob = WaxNative.exportState(a);
@@ -97,7 +107,7 @@ public class JniSmoke {
 
         /* ledger hash */
         long hh = WaxNative.hashCreate();
-        WaxNative.hashUpdate(hh, frame);
+        WaxNative.hashUpdate(hh, frame, 0, frame.length);
         byte[] digest = WaxNative.hashFinal(hh);
         WaxNative.hashFree(hh);
         check(digest != null && digest.length == 32, "digest len");

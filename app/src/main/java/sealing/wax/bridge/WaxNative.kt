@@ -65,6 +65,10 @@ object WaxNative {
     /** Restores a session; counters come from the 16B platform file. */
     external fun importState(blob: ByteArray, sendNext: Long, recvHwm: Long): Long
 
+    /** Role-flipped copy of a state blob (checksum fixed): import it as a
+     * mirror session to decrypt this side's own history frames. */
+    external fun flipStateRole(blob: ByteArray): ByteArray
+
     /** Begins streaming file sealing; meta is encrypted in the first chunk. */
     external fun fileSealBegin(h: Long, meta: ByteArray, fileSize: Long): Long
 
@@ -90,7 +94,7 @@ object WaxNative {
     /** Streaming BLAKE2b-256 over the whole .swx (ledger hash, §7). */
     external fun hashCreate(): Long
 
-    external fun hashUpdate(h: Long, data: ByteArray)
+    external fun hashUpdate(h: Long, data: ByteArray, offset: Int, len: Int)
 
     external fun hashFinal(h: Long): ByteArray
 
