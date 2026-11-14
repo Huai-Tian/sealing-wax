@@ -19,3 +19,9 @@ endfunction()
 
 swx_add_test(test_frame)
 swx_add_test(test_session)
+
+# Deterministic wire-spec vectors; self-verifies against the core and emits
+# JSON to stdout (docs/vectors.json is the committed output).
+add_executable(vector_gen vector_gen.c)
+target_link_libraries(vector_gen PRIVATE swx_core sodium)
+add_test(NAME vector_gen_selfcheck COMMAND vector_gen)

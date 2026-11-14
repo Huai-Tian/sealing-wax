@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  # §10: 核心 host 可测——双端互操作、SAS、篡改/截断、重放、nonce 唯一性、
+  # destroy 清零,全部机器验证;外加 JNI 桥的宿主 JVM 冒烟。
+  host-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Host CTest (frame + session + vectors)
+        run: |
+          cmake -S app/src/main/cpp/tests -B build/host -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/host -j"$(nproc)"
+          ctest --test-dir build/host --output-on-failure
+
+      - name: JNI bridge smoke (desktop JVM)
+        run: tools/jni-smoke/run.sh
+
+      - name: Vectors unchanged
+        run: |
+          ./build/host/vector_gen > /tmp/vectors.json
+          diff -u docs/vectors.json /tmp/vectors.json
+
+  # §10: 云端 assembleDebug 出 APK——维护者免装本地 Android 工具链即可拿包。
+  # Runners 预装 Android SDK;缺失组件(含 NDK)由 AGP 自动补装。
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: assembleDebug (all ABIs)
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk

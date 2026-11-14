@@ -1,0 +1,33 @@
+{
+  "spec": "SWX1",
+  "suite": 1,
+  "note": "fixed inputs; cross-checked against the production core",
+  "fixed_inputs": {
+    "a_sk": "770102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e3f",
+    "b_sk": "882122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e1f",
+    "a_salt": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf",
+    "b_salt": "b0b1b2b3b4b5b6b7b8b9babbbcbdbebf",
+    "nonce": "0c000102030405060708090a",
+    "fingerprint": "f0f1f2f3f4f5f6f7f8f9fafbfcfdfeff",
+    "counter": 1,
+    "plaintext": "火漆 wire-spec vector",
+    "plaintext_hex": "e781abe6bc8620776972652d7370656320766563746f72"
+  },
+  "invite_frame_b64": "U1dYMQEBrGxdVTHMlB8xvcrWqpfEx1SnZWNfvxMFVwTr8L4Y3gCgoaKjpKWmp6ipqqusra6v",
+  "reply_frame_b64": "U1dYMQIBnetD59VPER6dQiarj6/CglC/DAbXY8BNO99B0bIA/nCwsbKztLW2t7i5uru8vb6/",
+  "sas": "533185916",
+  "session_key_hex": "eb68955628ce82968c802c3fda1f6cfdff3d644b7496afef61a4c55a6197dc3c",
+  "aad_hex": "5357583103010000000000000001f0f1f2f3f4f5f6f7f8f9fafbfcfdfeff0000000000000001",
+  "a2b": {
+    "msg_key_hex": "b433f963bc1857535c53bdb68fb323744f1d1b62b7b0fced52b817d353780f77",
+    "frame_hex": "53575831030100000000000000010c000102030405060708090af0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000000000000000143f5152439b5ac8688687c54888de7ba85d9aec640855a4d1a21c81dcd618152e6c0afc3adf4db",
+    "frame_b64": "U1dYMQMBAAAAAAAAAAEMAAECAwQFBgcICQrw8fLz9PX29/j5+vv8/f7/AAAAAAAAAAFD9RUkObWshohofFSIjee6hdmuxkCFWk0aIcgdzWGBUubAr8Ot9Ns="
+  },
+  "b2a": {
+    "msg_key_hex": "105d985f7176274b1fc187ab7c79f3f7ea830034db15d6e90aa264bd03abd6ea",
+    "frame_hex": "53575831030100000000000000010c000102030405060708090af0f1f2f3f4f5f6f7f8f9fafbfcfdfeff0000000000000001cc316a547cdda284356852585f48045ff5a87efe461d4debcb4a7186829549f381e260816dbd3c",
+    "frame_b64": "U1dYMQMBAAAAAAAAAAEMAAECAwQFBgcICQrw8fLz9PX29/j5+vv8/f7/AAAAAAAAAAHMMWpUfN2ihDVoUlhfSARf9ah+/kYdTevLSnGGgpVJ84HiYIFtvTw="
+  },
+  "state_blob_responder_hex": "535758530102010003e80000eb68955628ce82968c802c3fda1f6cfdff3d644b7496afef61a4c55a6197dc3cda17076df88df9ccdc2de5449cdc89c4",
+  "state_blob_inviter_hex": "535758530101010003e80000eb68955628ce82968c802c3fda1f6cfdff3d644b7496afef61a4c55a6197dc3c1a569b830b6ce8571c2b447272ccda87"
+}
