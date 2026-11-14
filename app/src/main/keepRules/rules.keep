@@ -4,6 +4,11 @@
 # their exact Java names; obfuscation or removal breaks System.loadLibrary.
 -keep class sealing.wax.bridge.WaxNative { *; }
 
+# androidx.startup discovers Initializers reflectively from the merged
+# manifest; R8 must not merge or rename them.
+-keep class androidx.startup.InitializationProvider { *; }
+-keep class * implements androidx.startup.Initializer { *; }
+
 # Release log stripping (§9: release 剥离日志且永不打印密钥/明文).
 -assumenosideeffects class android.util.Log {
     public static *** v(...);

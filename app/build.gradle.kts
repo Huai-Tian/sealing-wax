@@ -32,6 +32,9 @@ android {
     buildTypes {
         release {
             optimization {
+                // Template default for AGP 9 (do not remove: without the
+                // package scope R8 loses the app/library rooting and strips
+                // everything except explicit -keep rules).
                 enable = true
                 packageScope = setOf("androidx.**", "kotlin.**", "kotlinx.**")
             }
