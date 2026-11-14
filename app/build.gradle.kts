@@ -32,15 +32,20 @@ android {
     buildTypes {
         release {
             optimization {
-                // DO NOT drop packageScope: on AGP 9.5.1 a bare `enable = true`
-                // makes R8 lose the app/library rooting and strips everything
-                // except explicit -keep classes (verified: 107 app classes +
-                // all of Tink/ZXing in usage.txt, dex audit fails). The
-                // experimental deep-merging it enables is fenced off by the
-                // manifest opt-out from androidx.startup auto-init plus the
-                // keep rules and the tools/dex_audit.py CI gate.
+                // DO NOT drop packageScope entirely: on AGP 9.5.1 a bare
+                // `enable = true` makes R8 lose the app/library rooting and
+                // strips everything except explicit -keep classes (verified:
+                // 107 app classes + all of Tink/ZXing in usage.txt).
+                //
+                // DO NOT add "kotlin.**" to the scope either: it lets R8
+                // vertically merge the kotlin stdlib's package-private
+                // multi-facade classes (CollectionsKt__*) and AGP 9.1's
+                // default repackaging then moves the merged subclass to the
+                // root package — public class extending a package-private
+                // superclass across packages, IllegalAccessError at first
+                // load (real-device startup crash, twice).
                 enable = true
-                packageScope = setOf("androidx.**", "kotlin.**", "kotlinx.**")
+                packageScope = setOf("androidx.**", "kotlinx.**")
             }
         }
     }

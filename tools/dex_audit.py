@@ -56,15 +56,24 @@ def parse_dex(text):
             classes[cur] = ("", "")
             continue
         if cur:
-            m = re.match(r"\s*Access flags\s*:\s*(\S+)", line)
+            m = re.match(r"\s*Access flags\s*:\s*(.*)", line)
             if m:
                 access, sup = classes[cur]
-                classes[cur] = (m.group(1), sup)
+                classes[cur] = (m.group(1).strip(), sup)
             m = re.match(r"\s*Superclass\s*:\s*'(\S+)'", line)
             if m:
                 access, _ = classes[cur]
                 classes[cur] = (access, m.group(1))
     return classes
+
+
+def is_public(access):
+    # dexdump prints e.g. "0x0401 (PUBLIC ABSTRACT)"; either representation
+    # decides, and the hex bit (0x0001 = PUBLIC) is the authoritative one.
+    m = re.match(r"0x([0-9a-fA-F]+)", access)
+    if m:
+        return int(m.group(1), 16) & 0x1 != 0
+    return "PUBLIC" in access
 
 
 def main():
@@ -94,8 +103,10 @@ def main():
     for desc, (access, sup) in classes.items():
         if not sup or sup in ("Ljava/lang/Object;", "-"):
             continue
-        sup_access = classes.get(sup, ("", ""))[0]
-        if "PUBLIC" in access and "PUBLIC" not in sup_access:
+        if sup not in classes:
+            continue    # framework/library-external parent: not R8's doing
+        sup_access = classes[sup][0]
+        if is_public(access) and not is_public(sup_access):
             if desc.rsplit("/", 1)[0] != sup.rsplit("/", 1)[0]:
                 problems.append(
                     f"visibility inversion: {desc} (public) extends "
