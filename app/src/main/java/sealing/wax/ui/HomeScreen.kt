@@ -13,7 +13,9 @@ package sealing.wax.ui
 
 import android.widget.Toast
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,15 +30,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -51,18 +52,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import sealing.wax.store.Persistence
 import sealing.wax.store.SavedSession
 import java.text.DateFormat
 import java.util.Date
 
-/** 首页:状态卡片 + 会话列表 + FAB(新建/加入)。 */
+/** 首页:已保存的会话列表 + 右下角 +(展开新建/加入,点空白收回)。 */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun HomeScreen(
@@ -93,76 +90,87 @@ fun HomeScreen(
                         onClick = { fabExpanded = false; onNewSession() },
                     )
                 }
-                ExtendedFloatingActionButton(
-                    text = { Text(if (fabExpanded) "收起" else "配对") },
-                    icon = { Icon(Icons.Default.Add, contentDescription = null) },
+                FloatingActionButton(
                     onClick = { fabExpanded = !fabExpanded },
-                )
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "新建或加入会话")
+                }
             }
         },
     ) { padding ->
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(padding),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            item {
-                StatusCard()
-            }
-            item {
-                Text(
-                    "已保存的会话",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                )
-            }
-            if (sessions.isEmpty()) {
+        Box(Modifier.fillMaxSize().padding(padding)) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
                 item {
                     Text(
-                        "还没有保存的会话。点右下角[配对]开始。\n" +
-                            "保存与否,每次退出对话屏时再决定。",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        "已保存的会话",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
                     )
                 }
-            }
-            items(sessions, key = { it.id }) { s ->
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .combinedClickable(
-                            onClick = { onOpenSession(s.id) },
-                            onLongClick = { renameTarget = s },
-                        ),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    ),
-                ) {
-                    Row(
-                        Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(
-                            Icons.Default.Lock,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
+                if (sessions.isEmpty()) {
+                    item {
+                        Text(
+                            "还没有保存的会话。点右下角 + 开始。\n" +
+                                "保存与否,每次退出对话屏时再决定。",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        Spacer(Modifier.width(12.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(s.name, style = MaterialTheme.typography.titleMedium)
-                            Text(
-                                "最近使用 " + DateFormat.getDateTimeInstance().format(Date(s.lastUsedMs)),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    }
+                }
+                items(sessions, key = { it.id }) { s ->
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .combinedClickable(
+                                onClick = { onOpenSession(s.id) },
+                                onLongClick = { renameTarget = s },
+                            ),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        ),
+                    ) {
+                        Row(
+                            Modifier.padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                Icons.Default.Lock,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
                             )
-                        }
-                        IconButton(onClick = { deleteTarget = s }) {
-                            Icon(Icons.Default.Delete, contentDescription = "删除")
+                            Spacer(Modifier.width(12.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(s.name, style = MaterialTheme.typography.titleMedium)
+                                Text(
+                                    "最近使用 " + DateFormat.getDateTimeInstance().format(Date(s.lastUsedMs)),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            IconButton(onClick = { deleteTarget = s }) {
+                                Icon(Icons.Default.Delete, contentDescription = "删除")
+                            }
                         }
                     }
                 }
+                item { Spacer(Modifier.height(88.dp)) }
             }
-            item { Spacer(Modifier.height(88.dp)) }
+
+            /* 点空白处收回展开的两个选项(FAB 在 content 之上,不受遮罩影响) */
+            if (fabExpanded) {
+                Box(
+                    Modifier
+                        .matchParentSize()
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                        ) { fabExpanded = false },
+                )
+            }
         }
     }
 
@@ -201,41 +209,5 @@ fun HomeScreen(
             },
             dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text("取消") } },
         )
-    }
-}
-
-@Composable
-private fun StatusCard() {
-    val clipboard = LocalClipboardManager.current
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer,
-        ),
-    ) {
-        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Shield, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text("火漆 · Sealing Wax", style = MaterialTheme.typography.titleLarge)
-            }
-            Text(
-                "跑在任意 IM 之上的端到端加密会话层。\n" +
-                    "默认零状态,可选保存;加密跟随用户。",
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            Text(
-                "每条消息 = 正常发消息 + 1 步",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
-            )
-            TextButton(onClick = {
-                clipboard.setText(AnnotatedString("火漆 · Sealing Wax —— 端到端 · 两端平等 · 默认零状态"))
-            }) {
-                Icon(Icons.Default.ContentCopy, contentDescription = null)
-                Spacer(Modifier.width(4.dp))
-                Text("复制介绍语")
-            }
-        }
     }
 }
