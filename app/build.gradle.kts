@@ -32,9 +32,13 @@ android {
     buildTypes {
         release {
             optimization {
-                // Template default for AGP 9 (do not remove: without the
-                // package scope R8 loses the app/library rooting and strips
-                // everything except explicit -keep rules).
+                // DO NOT drop packageScope: on AGP 9.5.1 a bare `enable = true`
+                // makes R8 lose the app/library rooting and strips everything
+                // except explicit -keep classes (verified: 107 app classes +
+                // all of Tink/ZXing in usage.txt, dex audit fails). The
+                // experimental deep-merging it enables is fenced off by the
+                // manifest opt-out from androidx.startup auto-init plus the
+                // keep rules and the tools/dex_audit.py CI gate.
                 enable = true
                 packageScope = setOf("androidx.**", "kotlin.**", "kotlinx.**")
             }

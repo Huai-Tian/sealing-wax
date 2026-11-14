@@ -9,6 +9,22 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.SealingWax">
+
+        <!-- Nothing in this app uses ProcessLifecycleOwner (background sync
+             rides on Activity.onStop). Opt out of its androidx.startup
+             auto-init: the reflective discovery chain is the one place R8's
+             class merging broke release builds (IllegalAccessError on a
+             merged kotlin.collections superclass). -->
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            tools:node="merge">
+            <meta-data
+                android:name="androidx.lifecycle.ProcessLifecycleInitializer"
+                android:value="androidx.startup"
+                tools:node="remove" />
+        </provider>
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
