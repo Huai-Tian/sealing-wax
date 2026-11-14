@@ -10,21 +10,13 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.SealingWax">
 
-        <!-- Nothing in this app uses ProcessLifecycleOwner (background sync
-             rides on Activity.onStop). Opt out of its androidx.startup
-             auto-init: the reflective discovery chain is the one place R8's
-             class merging broke release builds (IllegalAccessError on a
-             merged kotlin.collections superclass). -->
-        <provider
-            android:name="androidx.startup.InitializationProvider"
-            android:authorities="${applicationId}.androidx-startup"
-            tools:node="merge">
-            <meta-data
-                android:name="androidx.lifecycle.ProcessLifecycleInitializer"
-                android:value="androidx.startup"
-                tools:node="remove" />
-        </provider>
-
+        <!-- NOTE: do NOT opt out of ProcessLifecycleInitializer's
+             androidx.startup auto-init. EmojiCompatInitializer (emoji2 1.4)
+             hard-depends on it; removing the meta-data crashes at startup
+             with "cannot be initialized lazily". The original crash this
+             opt-out tried to fix was R8's illegal merging of kotlin stdlib
+             facades, solved properly in build.gradle.kts by keeping
+             kotlin.** out of packageScope. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
