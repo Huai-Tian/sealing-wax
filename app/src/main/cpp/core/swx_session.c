@@ -90,6 +90,23 @@ int swx_msg_key(uint8_t out[32], const uint8_t session_key[32],
     return SWX_OK;
 }
 
+/* Transmission-mask keystream (README_AGENT.md §4):
+ * HKDF-Expand(session_key, "mask" || nonce, 38). Fresh per frame; the
+ * nonce is public on the wire, so both ends derive the same stream. */
+static int mask_keystream(uint8_t out[SWX_MASK_LEN],
+                          const uint8_t session_key[32],
+                          const uint8_t nonce[SWX_NONCE_LEN])
+{
+    uint8_t info[4 + SWX_NONCE_LEN];
+    memcpy(info, "mask", 4);
+    memcpy(info + 4, nonce, SWX_NONCE_LEN);
+    if (crypto_kdf_hkdf_sha256_expand(out, SWX_MASK_LEN, (const char *) info,
+                                      sizeof info, session_key) != 0) {
+        return SWX_E_CRYPTO;
+    }
+    return SWX_OK;
+}
+
 static int derive(swx_session *s, const uint8_t peer_pk[SWX_PUBKEY_LEN],
                   const uint8_t peer_salt[SWX_SALT_LEN])
 {
@@ -427,6 +444,16 @@ static int seal_frame(swx_session *s, uint8_t type,
     f.ct = ct;
     f.ct_len = (size_t) ct_len;
     if ((ret = swx_frame_encode(wire_out, wire_cap, wire_len, &f)) == SWX_OK) {
+        /* transmission mask: header regions XOR-masked before the frame
+         * leaves the core; the nonce region stays in the clear */
+        uint8_t ks[SWX_MASK_LEN];
+        ret = mask_keystream(ks, s->session_key, nonce);
+        if (ret == SWX_OK) {
+            ret = swx_frame_apply_mask(wire_out, *wire_len, ks);
+        }
+        sodium_memzero(ks, sizeof ks);
+    }
+    if (ret == SWX_OK) {
         s->send_next++;    /* counter consumed only on success */
         memcpy(s->last_fp, fp, SWX_FINGERPRINT_LEN);
         s->last_counter = counter;
@@ -565,27 +592,45 @@ static int reasm_stash(swx_session *s, const swx_frame *v,
 }
 
 /* Shared open path for data frames. view_out (nullable) receives a copy of
- * the decoded view; its pointers reference the caller's wire buffer. */
+ * the decoded view; hdr is caller-owned scratch that receives the unmasked
+ * 50-byte header — view pointers into it must not outlive the caller. */
 static int open_data(swx_session *s, uint8_t want_type,
                      const uint8_t *wire, size_t wire_len,
                      uint8_t fp_out[SWX_FINGERPRINT_LEN], swx_frame *view_out,
+                     uint8_t hdr[SWX_DATA_FIXED_LEN],
                      uint8_t *pt_out, size_t pt_cap, size_t *pt_len)
 {
     swx_frame v;
     uint8_t key[32];
+    uint8_t ks[SWX_MASK_LEN];
     uint8_t aad[SWX_AAD_LEN];
     unsigned long long m_len = 0;
     uint8_t dir = (s->role == SWX_ROLE_INVITER) ? SWX_DIR_RESPONDER
                                                 : SWX_DIR_INVITER;
     int ret;
 
-    if (s == NULL || wire == NULL || pt_len == NULL) {
+    if (s == NULL || wire == NULL || pt_len == NULL || hdr == NULL) {
         return SWX_E_ARG;
     }
     if (s->state != SWX_ST_ESTABLISHED) {
         return SWX_E_STATE;
     }
-    if ((ret = swx_frame_decode(&v, wire, wire_len)) != SWX_OK) {
+    if (wire_len < SWX_DATA_FIXED_LEN + SWX_TAG_LEN) {
+        return SWX_E_FORMAT;
+    }
+    /* transmission mask: unmask a local header copy, then parse it
+     * (wrong session / tampered header or nonce -> garbage magic) */
+    memcpy(hdr, wire, SWX_DATA_FIXED_LEN);
+    ret = mask_keystream(ks, s->session_key,
+                         wire + SWX_HEADER_LEN + SWX_COUNTER_LEN);
+    if (ret == SWX_OK) {
+        ret = swx_frame_apply_mask(hdr, SWX_DATA_FIXED_LEN, ks);
+    }
+    sodium_memzero(ks, sizeof ks);
+    if (ret != SWX_OK) {
+        return ret;
+    }
+    if ((ret = swx_frame_parse_data(&v, hdr, wire, wire_len)) != SWX_OK) {
         return ret;
     }
     if (v.type != want_type) {
@@ -634,6 +679,7 @@ int swx_session_open_text(swx_session *s,
 {
     swx_frame v;
     uint8_t scratch[SWX_MAX_PT_PIECE];
+    uint8_t hdr[SWX_DATA_FIXED_LEN];
     size_t raw_len = 0, len;
     int ret;
 
@@ -641,7 +687,7 @@ int swx_session_open_text(swx_session *s,
         return SWX_E_FORMAT;    /* text channel pieces are base64-bounded */
     }
     ret = open_data(s, SWX_TYPE_TEXT, wire, wire_len, fp_out, &v,
-                    scratch, sizeof scratch, &raw_len);
+                    hdr, scratch, sizeof scratch, &raw_len);
     if (ret != SWX_OK) {
         return ret;
     }
@@ -686,8 +732,9 @@ int swx_session_open_file_frame(swx_session *s,
                                 uint8_t fp_out[SWX_FINGERPRINT_LEN],
                                 uint8_t *pt_out, size_t pt_cap, size_t *pt_len)
 {
+    uint8_t hdr[SWX_DATA_FIXED_LEN];
     return open_data(s, SWX_TYPE_FILE, wire, wire_len, fp_out, NULL,
-                     pt_out, pt_cap, pt_len);
+                     hdr, pt_out, pt_cap, pt_len);
 }
 
 int swx_session_last_frame(const swx_session *s,

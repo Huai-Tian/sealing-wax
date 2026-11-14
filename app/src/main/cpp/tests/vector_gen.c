@@ -168,10 +168,11 @@ static int msg_key_spec(uint8_t out[32], const uint8_t session_key[32],
     return 0;
 }
 
-/* Build one data frame from the spec. */
+/* Build one data frame from the spec, including the transmission mask. */
 static int data_frame_spec(uint8_t *wire, size_t cap, size_t *wire_len,
                            uint8_t type, uint8_t dir,
-                           const uint8_t session_key[32])
+                           const uint8_t session_key[32],
+                           const uint8_t mask_ks[SWX_MASK_LEN])
 {
     uint8_t key[32], aad[SWX_AAD_LEN], ct[128];
     unsigned long long ct_len = 0;
@@ -194,7 +195,11 @@ static int data_frame_spec(uint8_t *wire, size_t cap, size_t *wire_len,
     f.total_chunks = 1;
     f.ct = ct;
     f.ct_len = (size_t) ct_len;
-    return swx_frame_encode(wire, cap, wire_len, &f);
+    CHECK(swx_frame_encode(wire, cap, wire_len, &f) == SWX_OK);
+    /* transmission mask: header regions XOR the keystream (wire-spec §3);
+     * the nonce region [14,26) stays in the clear */
+    CHECK(swx_frame_apply_mask(wire, *wire_len, mask_ks) == SWX_OK);
+    return SWX_OK;
 }
 
 /* State blob per wire-spec §10 (role byte 5). */
@@ -241,6 +246,7 @@ int main(void)
     uint8_t invite[SWX_INVITE_FRAME_LEN], reply[SWX_INVITE_FRAME_LEN];
     uint8_t wire_a2b[256], wire_b2a[256];
     uint8_t blob_responder[60], blob_inviter[60];
+    uint8_t mask_ks[SWX_MASK_LEN];
     size_t invite_len = 0, reply_len = 0, a2b_len = 0, b2a_len = 0;
     char sas[10];
     uint8_t msg_key_a2b[32], msg_key_b2a[32], aad[SWX_AAD_LEN];
@@ -263,10 +269,22 @@ int main(void)
     CHECK(swx_frame_encode(reply, sizeof reply, &reply_len, &f) == SWX_OK);
 
     CHECK(derive_spec(session_key, sas, A_SALT, B_SALT) == 0);
+    /* mask keystream: HKDF-Expand(session_key, "mask" || nonce, 38) —
+     * direction-independent (derived from session_key and nonce only) */
+    {
+        uint8_t info[4 + SWX_NONCE_LEN];
+        memcpy(info, "mask", 4);
+        memcpy(info + 4, NONCE, SWX_NONCE_LEN);
+        CHECK(crypto_kdf_hkdf_sha256_expand(mask_ks, SWX_MASK_LEN,
+                                            (const char *) info, sizeof info,
+                                            session_key) == 0);
+    }
     CHECK(data_frame_spec(wire_a2b, sizeof wire_a2b, &a2b_len,
-                          SWX_TYPE_TEXT, SWX_DIR_INVITER, session_key) == 0);
+                          SWX_TYPE_TEXT, SWX_DIR_INVITER, session_key,
+                          mask_ks) == 0);
     CHECK(data_frame_spec(wire_b2a, sizeof wire_b2a, &b2a_len,
-                          SWX_TYPE_TEXT, SWX_DIR_RESPONDER, session_key) == 0);
+                          SWX_TYPE_TEXT, SWX_DIR_RESPONDER, session_key,
+                          mask_ks) == 0);
     CHECK(msg_key_spec(msg_key_a2b, session_key, SWX_DIR_INVITER, COUNTER) == 0);
     CHECK(msg_key_spec(msg_key_b2a, session_key, SWX_DIR_RESPONDER, COUNTER) == 0);
     aad_spec(aad, SWX_TYPE_TEXT, SWX_SUITE_CHACHA, COUNTER, FP, 0, 1);
@@ -306,7 +324,8 @@ int main(void)
     print_b64("reply_frame_b64", reply, reply_len); printf(",\n  ");
     printf("\"sas\": \"%s\",\n  ", sas);
     print_hex("session_key_hex", session_key, 32); printf(",\n  ");
-    print_hex("aad_hex", aad, SWX_AAD_LEN); printf(",\n");
+    print_hex("aad_hex", aad, SWX_AAD_LEN); printf(",\n  ");
+    print_hex("mask_keystream_hex", mask_ks, SWX_MASK_LEN); printf(",\n");
     printf("  \"a2b\": {\n    ");
     print_hex("msg_key_hex", msg_key_a2b, 32); printf(",\n    ");
     print_hex("frame_hex", wire_a2b, a2b_len); printf(",\n    ");

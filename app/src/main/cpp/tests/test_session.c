@@ -57,6 +57,21 @@ static int open_b64(swx_session *s, const char *b64,
     return swx_session_open_text(s, wire, wire_len, NULL, pt_out, cap, pt_len);
 }
 
+/* white-box: spec-side transmission-mask keystream for a wire frame
+ * (mirrors mask_keystream in swx_session.c) */
+static int mask_ks_spec(uint8_t ks[SWX_MASK_LEN], const swx_session *s,
+                        const uint8_t *wire)
+{
+    uint8_t info[4 + SWX_NONCE_LEN];
+    memcpy(info, "mask", 4);
+    memcpy(info + 4, wire + SWX_HEADER_LEN + SWX_COUNTER_LEN, SWX_NONCE_LEN);
+    if (crypto_kdf_hkdf_sha256_expand(ks, SWX_MASK_LEN, (const char *) info,
+                                      sizeof info, s->session_key) != 0) {
+        return SWX_E_CRYPTO;
+    }
+    return SWX_OK;
+}
+
 /* ---- pairing + SAS ---- */
 
 static int test_pairing_sas(void)
@@ -283,20 +298,29 @@ static int test_replay_tamper(void)
                                     out, sizeof out, &out_len)
               == SWX_E_CRYPTO);
     }
-    /* tampered counter (raised, so it passes the high-water gate) */
+    /* tampered counter via white-box re-mask (raised past the high-water
+     * gate): the unmask stays valid, AEAD must catch the AAD mismatch */
     {
         uint8_t bad[SWX_MAX_FRAME_BIN];
+        uint8_t ks[SWX_MASK_LEN];
         memcpy(bad, wire, wire_len);
+        CHECK(mask_ks_spec(ks, a, bad) == SWX_OK);
+        CHECK(swx_frame_apply_mask(bad, wire_len, ks) == SWX_OK);
         bad[13] = 0x7f;                       /* counter LSB */
+        CHECK(swx_frame_apply_mask(bad, wire_len, ks) == SWX_OK);
         CHECK(swx_session_open_text(b, bad, wire_len, NULL,
                                     out, sizeof out, &out_len)
               == SWX_E_CRYPTO);
     }
-    /* tampered fingerprint */
+    /* tampered fingerprint via white-box re-mask: AEAD catches it */
     {
         uint8_t bad[SWX_MAX_FRAME_BIN];
+        uint8_t ks[SWX_MASK_LEN];
         memcpy(bad, wire, wire_len);
+        CHECK(mask_ks_spec(ks, a, bad) == SWX_OK);
+        CHECK(swx_frame_apply_mask(bad, wire_len, ks) == SWX_OK);
         bad[26] ^= 0xff;
+        CHECK(swx_frame_apply_mask(bad, wire_len, ks) == SWX_OK);
         CHECK(swx_session_open_text(b, bad, wire_len, NULL,
                                     out, sizeof out, &out_len)
               == SWX_E_CRYPTO);
@@ -308,9 +332,10 @@ static int test_replay_tamper(void)
     CHECK(swx_session_open_text(b, wire, SWX_DATA_FIXED_LEN + SWX_TAG_LEN - 1,
                                 NULL, out, sizeof out, &out_len)
           == SWX_E_FORMAT);
-    /* wrong session: authentic frame of pair (a,b) into pair (c,d) */
+    /* wrong session: the mask derives from a different key, the magic
+     * unmasks to garbage -> format error (never wrong plaintext) */
     CHECK(swx_session_open_text(d, wire, wire_len, NULL,
-                                out, sizeof out, &out_len) == SWX_E_CRYPTO);
+                                out, sizeof out, &out_len) == SWX_E_FORMAT);
     /* the untampered frame is still fine afterwards */
     CHECK(swx_session_open_text(b, wire, wire_len, NULL,
                                 out, sizeof out, &out_len) == SWX_OK);
@@ -329,6 +354,86 @@ static int test_replay_tamper(void)
                                     out, sizeof out, &out_len) == SWX_E_TYPE);
         swx_file_seal_free(se);
     }
+
+    swx_session_free(a);
+    swx_session_free(b);
+    swx_session_free(c);
+    swx_session_free(d);
+    return failures ? 1 : 0;
+}
+
+/* ---- transmission mask (§4: daily traffic must be unrecognizable) ---- */
+
+static int test_transport_mask(void)
+{
+    swx_session *a = NULL, *b = NULL, *c = NULL, *d = NULL;
+    const uint8_t msg[] = "mask me";
+    char pieces[MAX_PIECES][PIECE_STRIDE];
+    uint32_t np = 0;
+    uint8_t wire[SWX_MAX_FRAME_BIN], out[SWX_TEXT_MAX_PT];
+    size_t wire_len = 0, out_len = 0;
+
+    /* 8 frames: the first 14 wire bytes carry no magic and differ pairwise
+     * (fresh keystream per nonce), and every frame still opens */
+    {
+        uint8_t heads[8][SWX_HEADER_LEN + SWX_COUNTER_LEN];
+        CHECK(pair(&a, &b) == 0);
+        for (int i = 0; i < 8; i++) {
+            CHECK(swx_session_seal_text(a, msg, sizeof msg, NULL,
+                                        (char *) pieces, PIECE_STRIDE,
+                                        MAX_PIECES, &np) == SWX_OK);
+            CHECK(swx_b64_decode(wire, sizeof wire, &wire_len, pieces[0],
+                                 strlen(pieces[0])) == SWX_OK);
+            CHECK(wire_len >= SWX_DATA_FIXED_LEN + SWX_TAG_LEN);
+            memcpy(heads[i], wire, sizeof heads[i]);
+            CHECK(memcmp(heads[i], "SWX1", 4) != 0);  /* magic is masked */
+            CHECK(swx_session_open_text(b, wire, wire_len, NULL,
+                                        out, sizeof out, &out_len) == SWX_OK);
+            CHECK(out_len == sizeof msg && memcmp(out, msg, sizeof msg) == 0);
+        }
+        for (int i = 0; i < 8; i++) {
+            for (int j = i + 1; j < 8; j++) {
+                CHECK(memcmp(heads[i], heads[j], sizeof heads[i]) != 0);
+            }
+        }
+        swx_session_free(a);
+        swx_session_free(b);
+    }
+
+    /* raw tampering: magic region or the clear nonce breaks the unmask
+     * (magic unmasks to garbage -> format error); the fingerprint region
+     * keeps a valid magic, so AEAD is what catches it */
+    CHECK(pair(&a, &b) == 0);
+    CHECK(pair(&c, &d) == 0);                     /* unrelated session pair */
+    CHECK(swx_session_seal_text(a, msg, sizeof msg, NULL,
+                                (char *) pieces, PIECE_STRIDE, MAX_PIECES,
+                                &np) == SWX_OK);
+    CHECK(swx_b64_decode(wire, sizeof wire, &wire_len, pieces[0],
+                         strlen(pieces[0])) == SWX_OK);
+    {
+        uint8_t bad[SWX_MAX_FRAME_BIN];
+        memcpy(bad, wire, wire_len);
+        bad[0] ^= 0x01;                           /* masked magic region */
+        CHECK(swx_session_open_text(b, bad, wire_len, NULL,
+                                    out, sizeof out, &out_len)
+              == SWX_E_FORMAT);
+        memcpy(bad, wire, wire_len);
+        bad[14] ^= 0x01;                          /* clear nonce -> wrong ks */
+        CHECK(swx_session_open_text(b, bad, wire_len, NULL,
+                                    out, sizeof out, &out_len)
+              == SWX_E_FORMAT);
+        memcpy(bad, wire, wire_len);
+        bad[26] ^= 0x01;                          /* masked fingerprint region */
+        CHECK(swx_session_open_text(b, bad, wire_len, NULL,
+                                    out, sizeof out, &out_len)
+              == SWX_E_CRYPTO);
+    }
+    /* wrong session: keystream from a different session_key */
+    CHECK(swx_session_open_text(d, wire, wire_len, NULL,
+                                out, sizeof out, &out_len) == SWX_E_FORMAT);
+    /* the untampered frame still opens */
+    CHECK(swx_session_open_text(b, wire, wire_len, NULL,
+                                out, sizeof out, &out_len) == SWX_OK);
 
     swx_session_free(a);
     swx_session_free(b);
@@ -889,14 +994,14 @@ static int test_memory_discipline(void)
         for (int i = 0; i < 32; i++) {
             uint8_t wire[SWX_MAX_FRAME_BIN];
             size_t wire_len = 0;
-            swx_frame v;
             CHECK(swx_session_seal_text(c, (const uint8_t *) "n", 1, NULL,
                                         (char *) pieces, PIECE_STRIDE,
                                         MAX_PIECES, &np) == SWX_OK);
             CHECK(swx_b64_decode(wire, sizeof wire, &wire_len, pieces[0],
                                  strlen(pieces[0])) == SWX_OK);
-            CHECK(swx_frame_decode(&v, wire, wire_len) == SWX_OK);
-            memcpy(nonces[i], v.nonce, SWX_NONCE_LEN);
+            /* nonce region is never masked: read it straight off the wire */
+            memcpy(nonces[i], wire + SWX_HEADER_LEN + SWX_COUNTER_LEN,
+                   SWX_NONCE_LEN);
             CHECK(swx_session_open_text(d, wire, wire_len, NULL,
                                         out, sizeof out, &out_len)
                   == SWX_OK);
@@ -921,6 +1026,7 @@ int main(void)
     r |= test_text_roundtrip();
     r |= test_text_multipiece();
     r |= test_replay_tamper();
+    r |= test_transport_mask();
     r |= test_padding();
     r |= test_state_roundtrip();
     r |= test_file_roundtrip();

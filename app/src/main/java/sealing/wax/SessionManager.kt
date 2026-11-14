@@ -525,7 +525,7 @@ object SessionManager {
     }
 
     private fun friendlyError(code: String?, isSaved: Boolean): String = when (code) {
-        "SWX_E_FORMAT" -> "这不是火漆密文(格式错误)"
+        "SWX_E_FORMAT" -> "解不开:不是火漆密文,或粘错会话(需双端同版本)"
         "SWX_E_TYPE" -> "消息类型不符"
         "SWX_E_UNSUPPORTED" -> "不支持的套件,请升级 App"
         "SWX_E_REPLAY" -> "这条密文之前已经收过了"

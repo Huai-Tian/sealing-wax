@@ -148,6 +148,57 @@ int swx_frame_decode(swx_frame *out, const uint8_t *in, size_t in_len)
     return SWX_E_TYPE;
 }
 
+int swx_frame_apply_mask(uint8_t *buf, size_t len, const uint8_t ks[SWX_MASK_LEN])
+{
+    if (buf == NULL || ks == NULL) {
+        return SWX_E_ARG;
+    }
+    if (len < SWX_DATA_FIXED_LEN) {
+        return SWX_E_LEN;
+    }
+    for (size_t i = 0; i < SWX_HEADER_LEN + SWX_COUNTER_LEN; i++) {
+        buf[i] ^= ks[i];
+    }
+    for (size_t i = 26; i < SWX_DATA_FIXED_LEN; i++) {
+        buf[i] ^= ks[SWX_HEADER_LEN + SWX_COUNTER_LEN + (i - 26)];
+    }
+    return SWX_OK;
+}
+
+int swx_frame_parse_data(swx_frame *out, const uint8_t hdr[SWX_DATA_FIXED_LEN],
+                         const uint8_t *wire, size_t wire_len)
+{
+    if (out == NULL || hdr == NULL || wire == NULL) {
+        return SWX_E_ARG;
+    }
+    if (wire_len < SWX_DATA_FIXED_LEN + SWX_TAG_LEN) {
+        return SWX_E_FORMAT;
+    }
+    if (memcmp(hdr, SWX_MAGIC, SWX_MAGIC_LEN) != 0) {
+        return SWX_E_FORMAT;
+    }
+
+    memset(out, 0, sizeof(*out));
+    out->type = hdr[4];
+    out->suite = hdr[5];
+
+    if (out->suite != SWX_SUITE_CHACHA) {
+        return SWX_E_UNSUPPORTED;
+    }
+    if (out->type != SWX_TYPE_TEXT && out->type != SWX_TYPE_FILE) {
+        return SWX_E_TYPE;
+    }
+
+    out->counter = swx_load64be(hdr + SWX_HEADER_LEN);
+    out->nonce = wire + SWX_HEADER_LEN + SWX_COUNTER_LEN; /* never masked */
+    out->fingerprint = hdr + 26;
+    out->chunk_index = swx_load32be(hdr + 42);
+    out->total_chunks = swx_load32be(hdr + 46);
+    out->ct = wire + SWX_DATA_FIXED_LEN;
+    out->ct_len = wire_len - SWX_DATA_FIXED_LEN;
+    return SWX_OK;
+}
+
 int swx_frame_aad(uint8_t *aad_out, const uint8_t *wire, size_t wire_len)
 {
     if (aad_out == NULL || wire == NULL) {

@@ -49,6 +49,18 @@ int swx_frame_encode(uint8_t *out, size_t out_cap, size_t *out_len,
  * Unknown suites yield SWX_E_UNSUPPORTED (never wrong plaintext). */
 int swx_frame_decode(swx_frame *out, const uint8_t *in, size_t in_len);
 
+/* Transmission mask (README_AGENT.md §4): XOR the masked regions of a
+ * data frame buffer in place — [0..14) and [26..min(len, 50)) — using a
+ * keystream laid out as ks[0..14) -> offset 0, ks[14..38) -> offset 26.
+ * len must be >= SWX_DATA_FIXED_LEN; ciphertext is never masked. */
+int swx_frame_apply_mask(uint8_t *buf, size_t len, const uint8_t ks[SWX_MASK_LEN]);
+
+/* Parse a data-frame view from an UNMASKED 50-byte header copy. The nonce
+ * and ct pointers reference the original (still-masked) wire buffer; the
+ * nonce region is never masked, so wire bytes are authoritative there. */
+int swx_frame_parse_data(swx_frame *out, const uint8_t hdr[SWX_DATA_FIXED_LEN],
+                         const uint8_t *wire, size_t wire_len);
+
 /* AAD for a data frame = wire[0..14) || wire[26..50). aad_out: SWX_AAD_LEN. */
 int swx_frame_aad(uint8_t *aad_out, const uint8_t *wire, size_t wire_len);
 

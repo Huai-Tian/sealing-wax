@@ -29,7 +29,15 @@ salt    16B  本端随机盐(CSPRNG)
 仅 `type` 与载荷归属不同。公钥为自身密钥的 `crypto_scalarmult_base`
 输出;私钥在配对完成后即被销毁。
 
+邀请/回复帧保持明文可识别(掩握手需要先有共享密钥,鸡生蛋;任何接收
+方可用的识别规则,服务器同样能跑)。这是既定交换:配对仪式可识别
+(罕见、一次性),日常数据帧不可识别(§3 传输掩码)。明文握手不提供
+任何解掩能力——解掩只缺 `session_key`,而它只缺 ECDH 共享秘密,
+私钥永不上链路(论证见 README_AGENT §4)。
+
 ## 3. 数据帧(文本/文件共用)
+
+逻辑字段(掩码前的帧结构):
 
 ```
 header      6B   (magic + type + suite)
@@ -40,6 +48,28 @@ chunk_idx   4B   分片序号,从 0 起
 chunk_total 4B   总分片数(单片消息 = 1)
 ct          n≥16B ChaCha20-Poly1305 密文 || 16B tag
 ```
+
+**传输掩码(上线字节,2026-11 定案)**:固定头 50B 中除 nonce(偏移
+[14,26))外全部掩码——区域 `[0..14) ∪ [26..50)` 共 38B(恰为 §4 AAD
+区)与掩码密钥流逐字节 XOR;`ct` 不掩(AEAD 输出本就伪随机):
+
+```
+mask_ks = HKDF-SHA256-Expand(session_key, "mask" || nonce, 38)
+
+masked[i] = header[i] XOR mask_ks[i]          (0 ≤ i < 14)
+masked[i] = header[i] XOR mask_ks[i - 12]     (26 ≤ i < 50)
+```
+
+(`mask_ks[14..38)` 平移 12 对齐到偏移 26;nonce 区原样上线。)
+
+掩码后整帧在计算上与等长随机字节不可区分——信道侧无法把日常流量
+识别为火漆(magic / counter / 指纹特征全部消失)。长度与时序仍可见
+(长度由 §9 填充缓解)。
+
+收方流程:长度检查(≥66B)→ 读明文 nonce → 派生 `mask_ks` → 解掩
+本地 50B 头副本 → 验 magic/type/suite(失败 `SWX_E_FORMAT`,未知
+suite `SWX_E_UNSUPPORTED`)→ §6 高水位 → AEAD 解密。错会话、头
+篡改、nonce 篡改均表现为 `SWX_E_FORMAT`(魔数解成垃圾)。
 
 帧最小长度 = 50 + 16 = 66B。`chunk_idx >= chunk_total` 为格式错误。
 
@@ -64,6 +94,7 @@ session_key = HKDF-SHA256-Expand(prk, "session" || suite, 32)
 sas_raw     = HKDF-SHA256-Expand(prk, "sas", 64)
 msg_key     = HKDF-SHA256-Expand(session_key,
                                   "msg" || dir(1) || counter(8 BE), 32)
+mask_ks     = HKDF-SHA256-Expand(session_key, "mask" || nonce(12), 38)
 ```
 
 `dir`:发起方发送 = 0x01,接收方发送 = 0x02。同一逻辑消息的每个分片
@@ -151,5 +182,5 @@ thresh(2 BE) rsv(2)=0 session_key(32) blake2b-128(16 over前44B)
 ## 12. 安全主张边界
 
 本规范覆盖的保证:信道读取、篡改/伪造、重放/延迟、首次配对 MITM
-(SAS 带外核对)。不承诺:解锁态设备被完全掌控、通信元数据、对端背叛。
-见 README_AGENT §2。
+(SAS 带外核对)、数据帧协议指纹不可识别(§3 传输掩码)。不承诺:
+解锁态设备被完全掌控、通信元数据、对端背叛。见 README_AGENT §2。

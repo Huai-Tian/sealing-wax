@@ -63,6 +63,12 @@ extern "C" {
 #define SWX_AAD_LEN          (SWX_HEADER_LEN + SWX_COUNTER_LEN + \
                               SWX_FINGERPRINT_LEN + 2 * SWX_CHUNK_LEN)        /* 38 */
 
+/* Transmission mask (README_AGENT.md §4): data-frame header bytes
+ * [0..14) and [26..50) are XOR-masked on the wire with
+ * HKDF-SHA256-Expand(session_key, "mask" || nonce, SWX_MASK_LEN).
+ * Same byte regions as the AAD; the nonce stays in the clear. */
+#define SWX_MASK_LEN          (SWX_AAD_LEN)                                    /* 38 */
+
 /* text channel: base64 single-piece cap and derived binary/plain limits */
 #define SWX_MAX_PIECE_B64    4000
 #define SWX_MAX_FRAME_BIN    ((SWX_MAX_PIECE_B64 / 4) * 3)          /* 3000 */
