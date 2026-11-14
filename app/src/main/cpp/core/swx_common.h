@@ -30,6 +30,7 @@ extern "C" {
 #define SWX_E_REPLAY       (-7)   /* counter at/below receive high-water */
 #define SWX_E_UNSUPPORTED  (-8)   /* e.g. unknown suite (future migration) */
 #define SWX_E_IO           (-9)   /* state import corruption */
+#define SWX_E_PARTIAL      (-10)  /* piece accepted; logical message incomplete */
 
 /* ---- wire format (README_AGENT.md §4) ---- */
 #define SWX_MAGIC            "SWX1"
@@ -67,6 +68,36 @@ extern "C" {
 #define SWX_MAX_FRAME_BIN    ((SWX_MAX_PIECE_B64 / 4) * 3)          /* 3000 */
 #define SWX_MAX_CT_PIECE     (SWX_MAX_FRAME_BIN - SWX_DATA_FIXED_LEN) /* 2950 */
 #define SWX_MAX_PT_PIECE     (SWX_MAX_CT_PIECE - SWX_TAG_LEN)        /* 2934 */
+
+/* ---- session layer (README_AGENT.md §4/§6) ---- */
+
+/* roles / direction bytes for message-key derivation */
+#define SWX_ROLE_INVITER     1
+#define SWX_ROLE_RESPONDER   2
+#define SWX_DIR_INVITER      0x01   /* inviter -> responder */
+#define SWX_DIR_RESPONDER    0x02   /* responder -> inviter */
+
+/* session states */
+#define SWX_ST_NEW           1
+#define SWX_ST_ESTABLISHED   2
+#define SWX_ST_DEAD          3
+
+/* SAS: 9 uniform decimal digits via rejection sampling (3-3-3 grouping is UI) */
+#define SWX_SAS_DIGITS       9
+
+/* text channel logical-message budget (pieces are reassembled in core) */
+#define SWX_TEXT_MAX_PIECES  256
+#define SWX_TEXT_MAX_PT      ((size_t) SWX_TEXT_MAX_PIECES * SWX_MAX_PT_PIECE)
+
+/* file channel: in-memory chunking granularity, independent of IM limits */
+#define SWX_FILE_PIECE_DEFAULT  ((uint32_t) (8u * 1024u * 1024u))
+#define SWX_FILE_META_MAX    4096   /* filename etc., encrypted in first chunk */
+
+/* length-confusion padding thresholds, measured in base64 chars of a piece.
+ * A threshold T maps to a plaintext target of T*3/4 - 66 bytes, so a padded
+ * piece encodes to exactly T base64 characters (4000 -> 2934 = piece cap). */
+#define SWX_PAD_THRESHOLD_MIN  500
+#define SWX_PAD_THRESHOLD_MAX  4000
 
 #ifdef __cplusplus
 }

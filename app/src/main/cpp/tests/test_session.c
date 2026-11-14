@@ -1,0 +1,890 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later
+ * 火漆 · Sealing Wax — https://github.com/Huai-Tian/sealing-wax
+ * Copyright (C) 2026 Huai-Tian and contributors
+ *
+ * This program is free software: you can redistribute it and/or modify it
+ * under the terms of the GNU Affero General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or (at your
+ * option) any later version. See the GNU Affero General Public License for
+ * more details. You should have received a copy of the license along with
+ * this program; if not, see <https://www.gnu.org/licenses/>.
+ */
+#include "swx_session_internal.h"
+#include "swx_hash.h"
+
+#include <sodium.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+static int failures = 0;
+
+#define CHECK(cond) do {                                                     \
+    if (!(cond)) {                                                           \
+        fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, #cond);      \
+        failures++;                                                          \
+        return 1;                                                            \
+    }                                                                        \
+} while (0)
+
+#define PIECE_STRIDE (SWX_MAX_PIECE_B64 + 1)
+#define MAX_PIECES 8
+
+/* ---- helpers ---- */
+
+static int pair(swx_session **a, swx_session **b)
+{
+    uint8_t inv[SWX_INVITE_FRAME_LEN], rep[SWX_INVITE_FRAME_LEN];
+    size_t n = 0;
+
+    CHECK(swx_session_create(a, SWX_ROLE_INVITER) == SWX_OK);
+    CHECK(swx_session_create(b, SWX_ROLE_RESPONDER) == SWX_OK);
+    CHECK(swx_session_invite(*a, inv, sizeof inv, &n) == SWX_OK);
+    CHECK(n == SWX_INVITE_FRAME_LEN);
+    CHECK(swx_session_reply(*b, inv, n, rep, sizeof rep, &n) == SWX_OK);
+    CHECK(swx_session_finish(*a, rep, n) == SWX_OK);
+    return 0;
+}
+
+/* paste one base64 piece into a session */
+static int open_b64(swx_session *s, const char *b64,
+                    uint8_t *pt_out, size_t cap, size_t *pt_len)
+{
+    uint8_t wire[SWX_MAX_FRAME_BIN];
+    size_t wire_len = 0;
+    CHECK(swx_b64_decode(wire, sizeof wire, &wire_len, b64, strlen(b64))
+          == SWX_OK);
+    return swx_session_open_text(s, wire, wire_len, NULL, pt_out, cap, pt_len);
+}
+
+/* ---- pairing + SAS ---- */
+
+static int test_pairing_sas(void)
+{
+    swx_session *a = NULL, *b = NULL;
+    char sa[SWX_SAS_DIGITS + 1], sb[SWX_SAS_DIGITS + 1];
+    uint8_t inv[SWX_INVITE_FRAME_LEN], rep[SWX_INVITE_FRAME_LEN];
+    size_t n = 0;
+
+    CHECK(pair(&a, &b) == 0);
+    CHECK(swx_session_sas(a, sa) == SWX_OK);
+    CHECK(swx_session_sas(b, sb) == SWX_OK);
+    CHECK(strcmp(sa, sb) == 0);                 /* §11-1: identical SAS */
+    CHECK(strlen(sa) == SWX_SAS_DIGITS);
+    for (int i = 0; i < SWX_SAS_DIGITS; i++) {
+        CHECK(sa[i] >= '0' && sa[i] <= '9');
+    }
+
+    /* roles are sticky */
+    CHECK(swx_session_role(a) == SWX_ROLE_INVITER);
+    CHECK(swx_session_role(b) == SWX_ROLE_RESPONDER);
+
+    /* responder cannot emit an invite */
+    CHECK(swx_session_invite(b, inv, sizeof inv, &n) == SWX_E_STATE);
+    /* finished session cannot finish again */
+    CHECK(swx_session_invite(a, inv, sizeof inv, &n) == SWX_E_STATE);
+    CHECK(swx_session_finish(a, rep, 0) == SWX_E_STATE);
+
+    /* handshake type confusion is rejected */
+    {
+        swx_session *c = NULL, *d = NULL, *e = NULL, *f = NULL;
+        uint8_t wire[SWX_INVITE_FRAME_LEN];
+        CHECK(pair(&c, &d) == 0);
+        /* an established session can no longer emit invites */
+        CHECK(swx_session_invite(c, wire, sizeof wire, &n) == SWX_E_STATE);
+        swx_session_free(c);
+        swx_session_free(d);
+
+        /* a fresh responder fed a REPLY-typed frame */
+        CHECK(swx_session_create(&e, SWX_ROLE_RESPONDER) == SWX_OK);
+        CHECK(swx_session_create(&f, SWX_ROLE_INVITER) == SWX_OK);
+        CHECK(swx_session_invite(f, wire, sizeof wire, &n) == SWX_OK);
+        wire[4] = SWX_TYPE_REPLY;
+        CHECK(swx_session_reply(e, wire, n, rep, sizeof rep, &n)
+              == SWX_E_TYPE);
+        /* self-paste: f finishing with its own (reply-typed) invite */
+        CHECK(swx_session_finish(f, wire, n) == SWX_E_STATE);
+        swx_session_free(e);
+        swx_session_free(f);
+    }
+
+    swx_session_free(a);
+    swx_session_free(b);
+    return failures ? 1 : 0;
+}
+
+/* ---- text channel ---- */
+
+static int test_text_roundtrip(void)
+{
+    swx_session *a = NULL, *b = NULL;
+    const uint8_t msg[] = { 'h', 'e', 'l', 'l', 'o', ' ',
+                            0xe7, 0x81, 0xab, 0xe6, 0xbc, 0x86 }; /* "hello 火漆" */
+    char pieces[MAX_PIECES][PIECE_STRIDE];
+    uint32_t np = 0;
+    uint8_t out[SWX_TEXT_MAX_PT];
+    size_t out_len = 0;
+    uint64_t sn = 0, hwm = 0;
+
+    CHECK(pair(&a, &b) == 0);
+    swx_session_counters(a, &sn, &hwm);
+    CHECK(sn == 1 && hwm == 0);
+
+    /* a -> b */
+    CHECK(swx_session_seal_text(a, msg, sizeof msg, NULL,
+                                (char *) pieces, PIECE_STRIDE, MAX_PIECES,
+                                &np) == SWX_OK);
+    CHECK(np == 1);
+    CHECK(strlen(pieces[0]) <= SWX_MAX_PIECE_B64);
+    CHECK(open_b64(b, pieces[0], out, sizeof out, &out_len) == SWX_OK);
+    CHECK(out_len == sizeof msg);
+    CHECK(memcmp(out, msg, sizeof msg) == 0);
+
+    swx_session_counters(a, &sn, &hwm);
+    CHECK(sn == 2 && hwm == 0);              /* one counter consumed */
+    swx_session_counters(b, &sn, &hwm);
+    CHECK(sn == 1 && hwm == 1);
+
+    /* b -> a (opposite direction key) */
+    CHECK(swx_session_seal_text(b, msg, sizeof msg, NULL,
+                                (char *) pieces, PIECE_STRIDE, MAX_PIECES,
+                                &np) == SWX_OK);
+    CHECK(open_b64(a, pieces[0], out, sizeof out, &out_len) == SWX_OK);
+    CHECK(out_len == sizeof msg && memcmp(out, msg, sizeof msg) == 0);
+
+    /* empty message roundtrips to empty */
+    CHECK(swx_session_seal_text(a, (const uint8_t *) "", 0, NULL,
+                                (char *) pieces, PIECE_STRIDE, MAX_PIECES,
+                                &np) == SWX_OK);
+    CHECK(np == 1);
+    CHECK(open_b64(b, pieces[0], out, sizeof out, &out_len) == SWX_OK);
+    CHECK(out_len == 0);
+
+    swx_session_free(a);
+    swx_session_free(b);
+    return failures ? 1 : 0;
+}
+
+static int test_text_multipiece(void)
+{
+    swx_session *a = NULL, *b = NULL;
+    uint8_t pt[2 * SWX_MAX_PT_PIECE + 100];
+    char pieces[MAX_PIECES][PIECE_STRIDE];
+    uint32_t np = 0;
+    uint8_t out[SWX_TEXT_MAX_PT];
+    size_t out_len = 0;
+    uint64_t sn = 0, hwm = 0;
+
+    for (size_t i = 0; i < sizeof pt; i++) {
+        pt[i] = (uint8_t) (i * 7 + 3);
+    }
+
+    CHECK(pair(&a, &b) == 0);
+    CHECK(swx_session_seal_text(a, pt, sizeof pt, NULL,
+                                (char *) pieces, PIECE_STRIDE, MAX_PIECES,
+                                &np) == SWX_OK);
+    CHECK(np == 3);                          /* 2934 + 2934 + 100 */
+
+    /* in-order paste: partial, partial, complete */
+    CHECK(open_b64(b, pieces[0], out, sizeof out, &out_len) == SWX_E_PARTIAL);
+    CHECK(open_b64(b, pieces[1], out, sizeof out, &out_len) == SWX_E_PARTIAL);
+    CHECK(open_b64(b, pieces[2], out, sizeof out, &out_len) == SWX_OK);
+    CHECK(out_len == sizeof pt);
+    CHECK(memcmp(out, pt, sizeof pt) == 0);
+
+    swx_session_counters(a, &sn, &hwm);
+    CHECK(sn == 4 && hwm == 0);              /* three counters consumed */
+    swx_session_counters(b, &sn, &hwm);
+    CHECK(hwm == 3);
+
+    /* strict high-water: pasting an earlier piece after a later one is
+     * rejected (§4 "旧号拒收"); reassembly never yields wrong plaintext */
+    {
+        swx_session *c = NULL, *d = NULL;
+        CHECK(pair(&c, &d) == 0);
+        CHECK(swx_session_seal_text(c, pt, sizeof pt, NULL,
+                                    (char *) pieces, PIECE_STRIDE, MAX_PIECES,
+                                    &np) == SWX_OK);
+        CHECK(open_b64(d, pieces[1], out, sizeof out, &out_len)
+              == SWX_E_PARTIAL);
+        CHECK(open_b64(d, pieces[0], out, sizeof out, &out_len)
+              == SWX_E_REPLAY);               /* counter 1 <= hwm 2 */
+        CHECK(open_b64(d, pieces[2], out, sizeof out, &out_len)
+              == SWX_E_PARTIAL);              /* piece 1 lost: incomplete */
+        swx_session_free(c);
+        swx_session_free(d);
+    }
+
+    /* boundary: pt == piece cap is one piece; +1 byte is two */
+    {
+        swx_session *c = NULL, *d = NULL;
+        uint8_t big[SWX_MAX_PT_PIECE + 1];
+        memset(big, 0x41, sizeof big);
+        CHECK(pair(&c, &d) == 0);
+        CHECK(swx_session_seal_text(c, big, SWX_MAX_PT_PIECE, NULL,
+                                    (char *) pieces, PIECE_STRIDE, MAX_PIECES,
+                                    &np) == SWX_OK);
+        CHECK(np == 1);
+        CHECK(swx_session_seal_text(c, big, SWX_MAX_PT_PIECE + 1, NULL,
+                                    (char *) pieces, PIECE_STRIDE, MAX_PIECES,
+                                    &np) == SWX_OK);
+        CHECK(np == 2);
+        CHECK(open_b64(d, pieces[0], out, sizeof out, &out_len)
+              == SWX_E_PARTIAL);
+        CHECK(open_b64(d, pieces[1], out, sizeof out, &out_len) == SWX_OK);
+        CHECK(out_len == SWX_MAX_PT_PIECE + 1);
+        CHECK(memcmp(out, big, sizeof big) == 0);
+        swx_session_free(c);
+        swx_session_free(d);
+    }
+
+    swx_session_free(a);
+    swx_session_free(b);
+    return failures ? 1 : 0;
+}
+
+static int test_replay_tamper(void)
+{
+    swx_session *a = NULL, *b = NULL, *c = NULL, *d = NULL;
+    const uint8_t msg[] = "attack at dawn";
+    char pieces[MAX_PIECES][PIECE_STRIDE];
+    uint32_t np = 0;
+    uint8_t wire[SWX_MAX_FRAME_BIN], out[SWX_TEXT_MAX_PT];
+    size_t wire_len = 0, out_len = 0;
+
+    CHECK(pair(&a, &b) == 0);
+    CHECK(pair(&c, &d) == 0);                 /* unrelated session pair */
+    CHECK(swx_session_seal_text(a, msg, sizeof msg, NULL,
+                                (char *) pieces, PIECE_STRIDE, MAX_PIECES,
+                                &np) == SWX_OK);
+    CHECK(swx_b64_decode(wire, sizeof wire, &wire_len, pieces[0],
+                         strlen(pieces[0])) == SWX_OK);
+
+    /* replay: same wire twice */
+    CHECK(swx_session_open_text(b, wire, wire_len, NULL,
+                                out, sizeof out, &out_len) == SWX_OK);
+    CHECK(swx_session_open_text(b, wire, wire_len, NULL,
+                                out, sizeof out, &out_len) == SWX_E_REPLAY);
+
+    /* tampering needs a not-yet-received counter: the replay gate would
+     * otherwise fire first (indistinguishable from a replay) */
+    CHECK(swx_session_seal_text(a, (const uint8_t *) "tamper me", 9, NULL,
+                                (char *) pieces, PIECE_STRIDE, MAX_PIECES,
+                                &np) == SWX_OK);
+    CHECK(swx_b64_decode(wire, sizeof wire, &wire_len, pieces[0],
+                         strlen(pieces[0])) == SWX_OK);
+
+    /* tampered ciphertext -> authentication failure, never wrong plaintext */
+    {
+        uint8_t bad[SWX_MAX_FRAME_BIN];
+        memcpy(bad, wire, wire_len);
+        bad[wire_len - 1] ^= 0x01;
+        CHECK(swx_session_open_text(b, bad, wire_len, NULL,
+                                    out, sizeof out, &out_len)
+              == SWX_E_CRYPTO);
+    }
+    /* tampered counter (raised, so it passes the high-water gate) */
+    {
+        uint8_t bad[SWX_MAX_FRAME_BIN];
+        memcpy(bad, wire, wire_len);
+        bad[13] = 0x7f;                       /* counter LSB */
+        CHECK(swx_session_open_text(b, bad, wire_len, NULL,
+                                    out, sizeof out, &out_len)
+              == SWX_E_CRYPTO);
+    }
+    /* tampered fingerprint */
+    {
+        uint8_t bad[SWX_MAX_FRAME_BIN];
+        memcpy(bad, wire, wire_len);
+        bad[26] ^= 0xff;
+        CHECK(swx_session_open_text(b, bad, wire_len, NULL,
+                                    out, sizeof out, &out_len)
+              == SWX_E_CRYPTO);
+    }
+    /* truncated frame: mid-ciphertext truncation fails authentication;
+     * truncation below the frame minimum is a format error */
+    CHECK(swx_session_open_text(b, wire, wire_len - 1, NULL,
+                                out, sizeof out, &out_len) == SWX_E_CRYPTO);
+    CHECK(swx_session_open_text(b, wire, SWX_DATA_FIXED_LEN + SWX_TAG_LEN - 1,
+                                NULL, out, sizeof out, &out_len)
+          == SWX_E_FORMAT);
+    /* wrong session: authentic frame of pair (a,b) into pair (c,d) */
+    CHECK(swx_session_open_text(d, wire, wire_len, NULL,
+                                out, sizeof out, &out_len) == SWX_E_CRYPTO);
+    /* the untampered frame is still fine afterwards */
+    CHECK(swx_session_open_text(b, wire, wire_len, NULL,
+                                out, sizeof out, &out_len) == SWX_OK);
+
+    /* type confusion: a FILE frame must not open as text */
+    {
+        swx_file_sealer *se = NULL;
+        static uint8_t fwire[SWX_FILE_PIECE_DEFAULT + 128];
+        size_t flen = 0;
+        const uint8_t meta[] = "x.bin";
+        CHECK(swx_file_seal_begin(&se, a, meta, sizeof meta, 4, 0, NULL)
+              == SWX_OK);
+        CHECK(swx_file_seal_chunk(se, (const uint8_t *) "abcd", 4,
+                                  fwire, sizeof fwire, &flen) == SWX_OK);
+        CHECK(swx_session_open_text(b, fwire, flen, NULL,
+                                    out, sizeof out, &out_len) == SWX_E_TYPE);
+        swx_file_seal_free(se);
+    }
+
+    swx_session_free(a);
+    swx_session_free(b);
+    swx_session_free(c);
+    swx_session_free(d);
+    return failures ? 1 : 0;
+}
+
+/* ---- padding (§4 length confusion) ---- */
+
+static int test_padding(void)
+{
+    swx_session *a = NULL, *b = NULL;
+    char pieces[MAX_PIECES][PIECE_STRIDE];
+    uint32_t np = 0;
+    uint8_t out[SWX_TEXT_MAX_PT];
+    size_t out_len = 0;
+
+    CHECK(pair(&a, &b) == 0);
+    CHECK(swx_session_set_padding(a, 1, 1000) == SWX_OK);   /* sender only */
+
+    /* short message: padded to exactly 1000 base64 chars */
+    CHECK(swx_session_seal_text(a, (const uint8_t *) "hi", 2, NULL,
+                                (char *) pieces, PIECE_STRIDE, MAX_PIECES,
+                                &np) == SWX_OK);
+    CHECK(np == 1);
+    CHECK(strlen(pieces[0]) == 1000);
+    CHECK(open_b64(b, pieces[0], out, sizeof out, &out_len) == SWX_OK);
+    CHECK(out_len == 2 && memcmp(out, "hi", 2) == 0);
+
+    /* long message: every piece padded to the threshold */
+    {
+        uint8_t pt[1500];
+        for (size_t i = 0; i < sizeof pt; i++) {
+            pt[i] = (uint8_t) (i * 13 + 1);
+        }
+        CHECK(swx_session_seal_text(a, pt, sizeof pt, NULL,
+                                    (char *) pieces, PIECE_STRIDE, MAX_PIECES,
+                                    &np) == SWX_OK);
+        CHECK(np == 3);                       /* ceil(1500 / 684) */
+        for (uint32_t i = 0; i < np; i++) {
+            CHECK(strlen(pieces[i]) == 1000);
+        }
+        CHECK(open_b64(b, pieces[0], out, sizeof out, &out_len)
+              == SWX_E_PARTIAL);
+        CHECK(open_b64(b, pieces[1], out, sizeof out, &out_len)
+              == SWX_E_PARTIAL);
+        CHECK(open_b64(b, pieces[2], out, sizeof out, &out_len) == SWX_OK);
+        CHECK(out_len == sizeof pt && memcmp(out, pt, sizeof pt) == 0);
+    }
+
+    /* threshold 4000 maps to the full piece cap */
+    CHECK(swx_session_set_padding(a, 1, 4000) == SWX_OK);
+    {
+        uint8_t pt[SWX_MAX_PT_PIECE];
+        memset(pt, 0x42, sizeof pt);
+        CHECK(swx_session_seal_text(a, pt, sizeof pt, NULL,
+                                    (char *) pieces, PIECE_STRIDE, MAX_PIECES,
+                                    &np) == SWX_OK);
+        CHECK(np == 1);
+        CHECK(strlen(pieces[0]) == 4000);
+        CHECK(open_b64(b, pieces[0], out, sizeof out, &out_len) == SWX_OK);
+        CHECK(out_len == sizeof pt);
+    }
+
+    /* invalid thresholds are rejected */
+    CHECK(swx_session_set_padding(a, 1, 999) == SWX_E_ARG);
+    CHECK(swx_session_set_padding(a, 1, 300) == SWX_E_ARG);
+    CHECK(swx_session_set_padding(a, 1, 4004) == SWX_E_ARG);
+
+    /* documented tradeoff: unpadded plaintext ending in 0x80 loses it,
+     * because the receiver always strips the [0x80][0x00*] marker */
+    CHECK(swx_session_set_padding(a, 0, 0) == SWX_OK);
+    {
+        const uint8_t tricky[] = { 'a', 'b', 0x80 };
+        CHECK(swx_session_seal_text(a, tricky, sizeof tricky, NULL,
+                                    (char *) pieces, PIECE_STRIDE, MAX_PIECES,
+                                    &np) == SWX_OK);
+        CHECK(open_b64(b, pieces[0], out, sizeof out, &out_len) == SWX_OK);
+        CHECK(out_len == 2 && memcmp(out, "ab", 2) == 0);
+    }
+
+    swx_session_free(a);
+    swx_session_free(b);
+    return failures ? 1 : 0;
+}
+
+/* ---- state export/import (§6) ---- */
+
+static int test_state_roundtrip(void)
+{
+    swx_session *a = NULL, *b = NULL, *a2 = NULL;
+    const uint8_t msg1[] = "before export";
+    const uint8_t msg2[] = "after import";
+    char pieces[MAX_PIECES][PIECE_STRIDE];
+    uint32_t np = 0;
+    uint8_t out[SWX_TEXT_MAX_PT];
+    size_t out_len = 0, blob_len = 0;
+    uint8_t blob[SWX_STATE_BLOB_MAX];
+    uint64_t sn = 0, hwm = 0;
+
+    CHECK(pair(&a, &b) == 0);
+    CHECK(swx_session_seal_text(a, msg1, sizeof msg1, NULL,
+                                (char *) pieces, PIECE_STRIDE, MAX_PIECES,
+                                &np) == SWX_OK);
+    CHECK(open_b64(b, pieces[0], out, sizeof out, &out_len) == SWX_OK);
+    CHECK(swx_session_seal_text(b, msg1, sizeof msg1, NULL,
+                                (char *) pieces, PIECE_STRIDE, MAX_PIECES,
+                                &np) == SWX_OK);
+    CHECK(open_b64(a, pieces[0], out, sizeof out, &out_len) == SWX_OK);
+
+    swx_session_counters(a, &sn, &hwm);
+    CHECK(sn == 2 && hwm == 1);
+    CHECK(swx_session_export(a, blob, sizeof blob, &blob_len) == SWX_OK);
+    CHECK(blob_len == 60);
+    swx_session_free(a);
+
+    /* import with the persisted counters; conversation continues */
+    CHECK(swx_session_import(&a2, blob, blob_len, sn, hwm) == SWX_OK);
+    CHECK(swx_session_role(a2) == SWX_ROLE_INVITER);
+    CHECK(swx_session_sas(a2, (char[10]){ 0 }) == SWX_E_STATE); /* no SAS */
+
+    CHECK(swx_session_seal_text(a2, msg2, sizeof msg2, NULL,
+                                (char *) pieces, PIECE_STRIDE, MAX_PIECES,
+                                &np) == SWX_OK);
+    CHECK(open_b64(b, pieces[0], out, sizeof out, &out_len) == SWX_OK);
+    CHECK(out_len == sizeof msg2 && memcmp(out, msg2, sizeof msg2) == 0);
+
+    CHECK(swx_session_seal_text(b, msg2, sizeof msg2, NULL,
+                                (char *) pieces, PIECE_STRIDE, MAX_PIECES,
+                                &np) == SWX_OK);
+    CHECK(open_b64(a2, pieces[0], out, sizeof out, &out_len) == SWX_OK);
+    CHECK(out_len == sizeof msg2 && memcmp(out, msg2, sizeof msg2) == 0);
+
+    /* replay across import is still rejected (hwm carried over) */
+    {
+        uint8_t wire[SWX_MAX_FRAME_BIN];
+        size_t wire_len = 0;
+        CHECK(swx_session_seal_text(b, msg1, sizeof msg1, NULL,
+                                    (char *) pieces, PIECE_STRIDE, MAX_PIECES,
+                                    &np) == SWX_OK);
+        CHECK(swx_b64_decode(wire, sizeof wire, &wire_len, pieces[0],
+                             strlen(pieces[0])) == SWX_OK);
+        CHECK(swx_session_open_text(a2, wire, wire_len, NULL,
+                                    out, sizeof out, &out_len) == SWX_OK);
+        CHECK(swx_session_open_text(a2, wire, wire_len, NULL,
+                                    out, sizeof out, &out_len)
+              == SWX_E_REPLAY);
+    }
+
+    /* corrupted blob -> SWX_E_IO, never a live session */
+    {
+        swx_session *bad = NULL;
+        uint8_t copy[SWX_STATE_BLOB_MAX];
+        memcpy(copy, blob, blob_len);
+        copy[20] ^= 0x40;
+        CHECK(swx_session_import(&bad, copy, blob_len, 1, 0) == SWX_E_IO);
+        CHECK(bad == NULL);
+        CHECK(swx_session_import(&bad, blob, blob_len - 1, 1, 0) == SWX_E_IO);
+        CHECK(swx_session_import(&bad, blob, blob_len + 1, 1, 0) == SWX_E_IO);
+    }
+    /* unknown suite -> explicit rejection, never wrong plaintext */
+    {
+        swx_session *bad = NULL;
+        uint8_t copy[SWX_STATE_BLOB_MAX];
+        memcpy(copy, blob, blob_len);
+        copy[6] = 0x02;                       /* suite byte */
+        crypto_generichash(copy + 44, 16, copy, 44, NULL, 0);
+        CHECK(swx_session_import(&bad, copy, blob_len, 1, 0)
+              == SWX_E_UNSUPPORTED);
+        CHECK(bad == NULL);
+    }
+    /* padding config survives the roundtrip */
+    {
+        swx_session *p1 = NULL, *p2 = NULL;
+        CHECK(pair(&p1, &p2) == 0);
+        CHECK(swx_session_set_padding(p1, 1, 2000) == SWX_OK);
+        CHECK(swx_session_export(p1, blob, sizeof blob, &blob_len) == SWX_OK);
+        swx_session_free(p1);
+        CHECK(swx_session_import(&p1, blob, blob_len, 1, 0) == SWX_OK);
+        CHECK(swx_session_seal_text(p1, (const uint8_t *) "x", 1, NULL,
+                                    (char *) pieces, PIECE_STRIDE, MAX_PIECES,
+                                    &np) == SWX_OK);
+        CHECK(strlen(pieces[0]) == 2000);
+        swx_session_free(p1);
+        swx_session_free(p2);
+    }
+
+    swx_session_free(a2);
+    swx_session_free(b);
+    return failures ? 1 : 0;
+}
+
+/* ---- file channel ---- */
+
+static int test_file_roundtrip(void)
+{
+    swx_session *a = NULL, *b = NULL;
+    const uint8_t meta[] = "hello.bin";
+    uint8_t file[2500];
+    uint8_t fp[SWX_FINGERPRINT_LEN];
+    static uint8_t wire[SWX_FILE_PIECE_DEFAULT + SWX_TAG_LEN + SWX_DATA_FIXED_LEN];
+    static uint8_t out[SWX_FILE_PIECE_DEFAULT];
+    uint8_t reassembled[4096];
+    size_t wire_len = 0, out_len = 0, got = 0;
+    uint32_t n_frames = 0;
+    uint64_t sn = 0, hwm = 0;
+    swx_file_sealer *se = NULL;
+
+    for (size_t i = 0; i < sizeof file; i++) {
+        file[i] = (uint8_t) (i * 31 + 7);
+    }
+
+    const size_t head = 4 + sizeof meta;       /* meta includes its NUL */
+    const size_t room0 = 1000 - head;          /* file bytes fitting chunk 0 */
+    CHECK(pair(&a, &b) == 0);
+    CHECK(swx_file_seal_begin(&se, a, meta, sizeof meta, sizeof file,
+                              1000, fp) == SWX_OK);
+    CHECK(swx_file_total_chunks(se) == 3);    /* ceil((4+10+2500)/1000) */
+    CHECK(swx_file_chunk_room(se) == room0);
+
+    /* wrong feed size (would span a boundary or underfill) is rejected */
+    CHECK(swx_file_seal_chunk(se, file, 500, wire, sizeof wire, &wire_len)
+          == SWX_E_ARG);
+
+    /* chunk 0: [4B meta_len][meta][room0 file bytes] */
+    CHECK(swx_file_seal_chunk(se, file, room0, wire, sizeof wire, &wire_len)
+          == SWX_OK);
+    CHECK(wire_len == SWX_DATA_FIXED_LEN + 1000 + SWX_TAG_LEN);
+    CHECK(swx_session_open_file_frame(b, wire, wire_len, NULL,
+                                      out, sizeof out, &out_len) == SWX_OK);
+    CHECK(out_len == 1000);
+    CHECK(out[0] == 0 && out[1] == 0 && out[2] == 0 && out[3] == sizeof meta);
+    CHECK(memcmp(out + 4, meta, sizeof meta) == 0);
+    CHECK(memcmp(out + head, file, room0) == 0);
+    memcpy(reassembled, out + head, room0);
+    got = room0;
+    n_frames = 1;
+
+    /* chunk 1: exactly 1000 */
+    CHECK(swx_file_seal_chunk(se, file + room0, 1000, wire, sizeof wire,
+                              &wire_len) == SWX_OK);
+    CHECK(swx_session_open_file_frame(b, wire, wire_len, NULL,
+                                      out, sizeof out, &out_len) == SWX_OK);
+    CHECK(out_len == 1000 && memcmp(out, file + room0, 1000) == 0);
+    memcpy(reassembled + got, out, 1000);
+    got += 1000;
+    n_frames++;
+
+    /* chunk 2: remainder (final; unpadded because padding is off) */
+    {
+        const size_t rem = sizeof file - room0 - 1000;    /* 514 */
+        CHECK(swx_file_seal_chunk(se, file + room0 + 1000, rem, wire,
+                                  sizeof wire, &wire_len) == SWX_OK);
+        CHECK(wire_len == SWX_DATA_FIXED_LEN + rem + SWX_TAG_LEN);
+        CHECK(swx_file_seal_done(se));
+        CHECK(swx_session_open_file_frame(b, wire, wire_len, NULL,
+                                          out, sizeof out, &out_len)
+              == SWX_OK);
+        CHECK(out_len == rem && memcmp(out, file + room0 + 1000, rem) == 0);
+        memcpy(reassembled + got, out, rem);
+        got += rem;
+        n_frames++;
+    }
+
+    CHECK(got == sizeof file);
+    CHECK(memcmp(reassembled, file, sizeof file) == 0);   /* §11-2 */
+    CHECK(n_frames == 3);
+
+    /* one counter consumed per chunk */
+    swx_session_counters(a, &sn, &hwm);
+    CHECK(sn == 4 && hwm == 0);
+    swx_session_counters(b, &sn, &hwm);
+    CHECK(hwm == 3);
+
+    /* over-feeding after completion */
+    CHECK(swx_file_seal_chunk(se, file, 1, wire, sizeof wire, &wire_len)
+          == SWX_E_STATE);
+    swx_file_seal_free(se);
+
+    /* tamper + replay need a not-yet-received file frame */
+    CHECK(swx_file_seal_begin(&se, a, meta, sizeof meta, 4, 1000, fp)
+          == SWX_OK);
+    CHECK(swx_file_seal_chunk(se, (const uint8_t *) "abcd", 4,
+                              wire, sizeof wire, &wire_len) == SWX_OK);
+    swx_file_seal_free(se);
+    {
+        static uint8_t bad[SWX_FILE_PIECE_DEFAULT + 64];
+        memcpy(bad, wire, wire_len);
+        bad[wire_len - 1] ^= 0x80;
+        CHECK(swx_session_open_file_frame(b, bad, wire_len, NULL,
+                                          out, sizeof out, &out_len)
+              == SWX_E_CRYPTO);
+        CHECK(swx_session_open_file_frame(b, wire, wire_len, NULL,
+                                          out, sizeof out, &out_len)
+              == SWX_OK);
+        CHECK(swx_session_open_file_frame(b, wire, wire_len, NULL,
+                                          out, sizeof out, &out_len)
+              == SWX_E_REPLAY);
+    }
+
+    swx_session_free(a);
+    swx_session_free(b);
+    (void) fp;
+    return failures ? 1 : 0;
+}
+
+static int test_file_padding_and_edges(void)
+{
+    swx_session *a = NULL, *b = NULL;
+    const uint8_t meta[] = "pad.bin";
+    uint8_t file[2000];
+    uint8_t fp[SWX_FINGERPRINT_LEN];
+    static uint8_t wire[SWX_FILE_PIECE_DEFAULT + SWX_TAG_LEN + SWX_DATA_FIXED_LEN];
+    static uint8_t out[SWX_FILE_PIECE_DEFAULT];
+    uint8_t cat[4096];
+    size_t wire_len = 0, out_len = 0, got = 0, trim_total = 0;
+    swx_file_sealer *se = NULL;
+
+    for (size_t i = 0; i < sizeof file; i++) {
+        file[i] = (uint8_t) (i * 17 + 11);
+    }
+
+    CHECK(pair(&a, &b) == 0);
+    CHECK(swx_session_set_padding(a, 1, 1000) == SWX_OK);
+
+    /* padded file: every chunk plaintext is the full bucket size, so the
+     * .swx only reveals the bucket count (§4) */
+    CHECK(swx_file_seal_begin(&se, a, meta, sizeof meta, sizeof file,
+                              1000, fp) == SWX_OK);
+    CHECK(swx_file_total_chunks(se) == 3);    /* (4+7+2000+999)/1000 */
+    for (int i = 0; !swx_file_seal_done(se); i++) {
+        size_t room = swx_file_chunk_room(se);
+        const uint8_t *src = file + got;
+        CHECK(swx_file_seal_chunk(se, src, room, wire, sizeof wire,
+                                  &wire_len) == SWX_OK);
+        CHECK(swx_session_open_file_frame(b, wire, wire_len, NULL,
+                                          out, sizeof out, &out_len)
+              == SWX_OK);
+        CHECK(out_len == 1000);               /* uniform bucket */
+        size_t take = room;
+        if (got + take > sizeof file) {
+            take = sizeof file - got;         /* trim by known size */
+        }
+        if (i == 0) {
+            /* first chunk carries [4B meta_len][meta] then file bytes */
+            CHECK(out[3] == sizeof meta);
+            CHECK(memcmp(out + 4, meta, sizeof meta) == 0);
+            memcpy(cat + got, out + 4 + sizeof meta, take);
+            trim_total = 4 + sizeof meta;
+        } else {
+            memcpy(cat + got, out, take);
+        }
+        got += room;
+    }
+    CHECK(got == sizeof file);
+    CHECK(memcmp(cat, file, sizeof file) == 0);
+    (void) trim_total;
+    swx_file_seal_free(se);
+
+    /* empty file: exactly one metadata-only chunk */
+    CHECK(swx_file_seal_begin(&se, a, meta, sizeof meta, 0, 1000, fp)
+          == SWX_OK);
+    CHECK(swx_file_total_chunks(se) == 1);
+    CHECK(swx_file_chunk_room(se) == 0);
+    CHECK(swx_file_seal_chunk(se, NULL, 0, wire, sizeof wire, &wire_len)
+          == SWX_OK);
+    CHECK(swx_file_seal_done(se));
+    CHECK(swx_session_open_file_frame(b, wire, wire_len, NULL,
+                                      out, sizeof out, &out_len) == SWX_OK);
+    CHECK(out_len == 1000);                   /* padded to the bucket */
+    CHECK(out[3] == sizeof meta && memcmp(out + 4, meta, sizeof meta) == 0);
+    swx_file_seal_free(se);
+
+    /* oversized meta is rejected up front */
+    {
+        uint8_t bigmeta[SWX_FILE_META_MAX + 1];
+        CHECK(swx_file_seal_begin(&se, a, bigmeta, sizeof bigmeta, 10, 0, fp)
+              == SWX_E_ARG);
+    }
+    /* chunk size bounds */
+    CHECK(swx_file_seal_begin(&se, a, meta, sizeof meta, 10, 100, fp)
+          == SWX_E_ARG);
+    CHECK(swx_file_seal_begin(&se, a, meta, sizeof meta, 10,
+                              SWX_FILE_PIECE_DEFAULT + 1, fp) == SWX_E_ARG);
+
+    /* fingerprint is stable across chunks and visible via last_frame */
+    {
+        uint8_t fp2[SWX_FINGERPRINT_LEN];
+        uint64_t counter = 0;
+        uint32_t idx = 0, total = 0;
+        CHECK(swx_file_seal_begin(&se, a, meta, sizeof meta, 10, 1000, fp2)
+              == SWX_OK);
+        CHECK(memcmp(fp2, fp, sizeof fp) != 0);  /* fresh per message */
+        CHECK(swx_file_seal_chunk(se, file, 10, wire, sizeof wire,
+                                  &wire_len) == SWX_OK);
+        CHECK(swx_session_last_frame(a, NULL, &counter, &idx, &total)
+              == SWX_OK);
+        CHECK(counter == a->send_next - 1 && idx == 0 && total == 1);
+        swx_file_seal_free(se);
+    }
+
+    swx_session_free(a);
+    swx_session_free(b);
+    return failures ? 1 : 0;
+}
+
+/* ---- ledger hash (§7) ---- */
+
+static int test_hash(void)
+{
+    uint8_t data[10000], digest[SWX_HASH_LEN], digest2[SWX_HASH_LEN];
+    swx_hash *h = NULL;
+
+    for (size_t i = 0; i < sizeof data; i++) {
+        data[i] = (uint8_t) (i * 37 + 5);
+    }
+
+    CHECK(swx_hash_create(&h) == SWX_OK);
+    CHECK(swx_hash_update(h, data, sizeof data) == SWX_OK);
+    CHECK(swx_hash_final(h, digest) == SWX_OK);
+    crypto_generichash(digest2, SWX_HASH_LEN, data, sizeof data, NULL, 0);
+    CHECK(memcmp(digest, digest2, SWX_HASH_LEN) == 0);
+    swx_hash_free(h);
+
+    /* arbitrary splits agree with the one-shot digest */
+    {
+        size_t offs[] = { 1, 3, 4096, 4096, 1804, 0 };
+        size_t pos = 0;
+        CHECK(swx_hash_create(&h) == SWX_OK);
+        for (size_t i = 0; i < sizeof offs / sizeof offs[0]; i++) {
+            CHECK(swx_hash_update(h, data + pos, offs[i]) == SWX_OK);
+            pos += offs[i];
+        }
+        CHECK(pos == sizeof data);
+        CHECK(swx_hash_final(h, digest2) == SWX_OK);
+        CHECK(memcmp(digest, digest2, SWX_HASH_LEN) == 0);
+        /* final() consumes the state */
+        CHECK(swx_hash_final(h, digest2) == SWX_E_STATE);
+        CHECK(swx_hash_update(h, data, 1) == SWX_E_STATE);
+        swx_hash_free(h);
+    }
+
+    /* different input, different digest */
+    {
+        data[0] ^= 1;
+        CHECK(swx_hash_create(&h) == SWX_OK);
+        CHECK(swx_hash_update(h, data, sizeof data) == SWX_OK);
+        CHECK(swx_hash_final(h, digest2) == SWX_OK);
+        CHECK(memcmp(digest, digest2, SWX_HASH_LEN) != 0);
+        swx_hash_free(h);
+    }
+    return failures ? 1 : 0;
+}
+
+/* ---- memory discipline (§10, §11-3) ---- */
+
+static int test_memory_discipline(void)
+{
+    swx_session *a = NULL, *b = NULL;
+    char pieces[MAX_PIECES][PIECE_STRIDE];
+    uint32_t np = 0;
+    uint8_t out[64];
+    size_t out_len = 0;
+
+    CHECK(pair(&a, &b) == 0);
+    CHECK(swx_session_seal_text(a, (const uint8_t *) "wipe me", 7, NULL,
+                                (char *) pieces, PIECE_STRIDE, MAX_PIECES,
+                                &np) == SWX_OK);
+
+    /* white-box: wipe zeroes key bytes in place and kills the session */
+    {
+        uint8_t before[32];
+        memcpy(before, a->session_key, 32);
+        swx_session_wipe(a);
+        for (size_t i = 0; i < 32; i++) {
+            CHECK(a->session_key[i] == 0);
+        }
+        for (size_t i = 0; i < 32; i++) {
+            CHECK(a->sk[i] == 0);
+        }
+        CHECK(a->state == SWX_ST_DEAD);
+        CHECK(swx_session_sas(a, (char[10]){ 0 }) == SWX_E_STATE);
+        CHECK(swx_session_seal_text(a, (const uint8_t *) "x", 1, NULL,
+                                    (char *) pieces, PIECE_STRIDE, MAX_PIECES,
+                                    &np) == SWX_E_STATE);
+        CHECK(before[0] != 0 || before[1] != 0 || before[2] != 0);
+    }
+    swx_session_free(a);    /* free after wipe must be safe */
+
+    /* message keys separate by direction and counter */
+    {
+        uint8_t k1[32], k2[32], k3[32];
+        uint8_t key[32];
+        memset(key, 0x77, sizeof key);
+        CHECK(swx_msg_key(k1, key, SWX_DIR_INVITER, 1) == SWX_OK);
+        CHECK(swx_msg_key(k2, key, SWX_DIR_RESPONDER, 1) == SWX_OK);
+        CHECK(swx_msg_key(k3, key, SWX_DIR_INVITER, 2) == SWX_OK);
+        CHECK(memcmp(k1, k2, 32) != 0);
+        CHECK(memcmp(k1, k3, 32) != 0);
+        CHECK(memcmp(k2, k3, 32) != 0);
+        /* deterministic */
+        CHECK(swx_msg_key(k2, key, SWX_DIR_INVITER, 1) == SWX_OK);
+        CHECK(memcmp(k1, k2, 32) == 0);
+    }
+
+    /* nonce uniqueness across many messages (12B CSPRNG per message) */
+    {
+        swx_session *c = NULL, *d = NULL;
+        uint8_t nonces[32][SWX_NONCE_LEN];
+        CHECK(pair(&c, &d) == 0);
+        for (int i = 0; i < 32; i++) {
+            uint8_t wire[SWX_MAX_FRAME_BIN];
+            size_t wire_len = 0;
+            swx_frame v;
+            CHECK(swx_session_seal_text(c, (const uint8_t *) "n", 1, NULL,
+                                        (char *) pieces, PIECE_STRIDE,
+                                        MAX_PIECES, &np) == SWX_OK);
+            CHECK(swx_b64_decode(wire, sizeof wire, &wire_len, pieces[0],
+                                 strlen(pieces[0])) == SWX_OK);
+            CHECK(swx_frame_decode(&v, wire, wire_len) == SWX_OK);
+            memcpy(nonces[i], v.nonce, SWX_NONCE_LEN);
+            CHECK(swx_session_open_text(d, wire, wire_len, NULL,
+                                        out, sizeof out, &out_len)
+                  == SWX_OK);
+        }
+        for (int i = 0; i < 32; i++) {
+            for (int j = i + 1; j < 32; j++) {
+                CHECK(memcmp(nonces[i], nonces[j], SWX_NONCE_LEN) != 0);
+            }
+        }
+        swx_session_free(c);
+        swx_session_free(d);
+    }
+
+    swx_session_free(b);
+    return failures ? 1 : 0;
+}
+
+int main(void)
+{
+    int r = 0;
+    r |= test_pairing_sas();
+    r |= test_text_roundtrip();
+    r |= test_text_multipiece();
+    r |= test_replay_tamper();
+    r |= test_padding();
+    r |= test_state_roundtrip();
+    r |= test_file_roundtrip();
+    r |= test_file_padding_and_edges();
+    r |= test_hash();
+    r |= test_memory_discipline();
+    if (failures == 0) {
+        printf("test_session: all passed\n");
+    } else {
+        printf("test_session: %d failure(s)\n", failures);
+    }
+    return r;
+}

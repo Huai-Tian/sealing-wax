@@ -18,3 +18,4 @@ function(swx_add_test name)
 endfunction()
 
 swx_add_test(test_frame)
+swx_add_test(test_session)

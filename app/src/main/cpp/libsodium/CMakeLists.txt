@@ -17,11 +17,15 @@ file(GLOB_RECURSE SWX_SODIUM_SRC CONFIGURE_DEPENDS
 
 add_library(sodium STATIC ${SWX_SODIUM_SRC})
 
-# Generated flat (not under sodium/): version.c does #include "version.h"
-# (quoted), which searches include paths for a file named exactly version.h.
-# Its own quoted #include "export.h" resolves via include/sodium below.
+# Generated twice: flat for version.c (which does #include "version.h"),
+# and under sodium/ for <sodium.h> (which does #include "sodium/version.h").
+# Both are quoted includes resolved via the include paths below; upstream
+# sources stay untouched. version.h.in's own #include "export.h" resolves
+# via include/sodium.
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/src/libsodium/include/sodium/version.h.in"
                "${CMAKE_CURRENT_BINARY_DIR}/version.h" @ONLY)
+configure_file("${CMAKE_CURRENT_SOURCE_DIR}/src/libsodium/include/sodium/version.h.in"
+               "${CMAKE_CURRENT_BINARY_DIR}/sodium/version.h" @ONLY)
 
 target_include_directories(sodium PUBLIC
     "${CMAKE_CURRENT_BINARY_DIR}"
