@@ -130,4 +130,30 @@
     <string name="swx_e_crypto_saved">Can\'t open it: pasted into the wrong session, or the other side didn\'t save this session (one-sided saving is void — please pair again)</string>
     <string name="swx_e_crypto_live">Can\'t open it: this ciphertext wasn\'t sent to this session</string>
     <string name="swx_decrypt_failed_code">Decryption failed (%1$s)</string>
+
+    <!-- home three-dot menu (Shizuku-style) -->
+    <string name="menu_open_source">Open source code</string>
+    <string name="menu_about">About</string>
+
+    <!-- about page -->
+    <string name="about_tagline">End-to-end. Both peers equal. Zero state by default.\nPaste ciphertext into any IM — servers only ever see ciphertext; keys belong to the two peers alone.</string>
+    <string name="about_version">Version %1$s</string>
+    <string name="about_github">GitHub repository</string>
+    <string name="license_label">License</string>
+    <string name="license_value">AGPL-3.0-or-later</string>
+
+    <!-- open source page -->
+    <string name="oss_intro">Sealing Wax is free software under AGPL-3.0-or-later: anyone may use, study, modify and redistribute it. If you run it as a network service, the server side must be open-sourced as well. Provided without any warranty.</string>
+    <string name="oss_components_header">Components and licenses</string>
+    <string name="oss_c1">Sealing Wax protocol core (in-house, core/)</string>
+    <string name="oss_c2">libsodium 1.0.22 (vendored source)</string>
+    <string name="oss_c3">spake2 (BoringSSL port, via spake2-c)</string>
+    <string name="oss_c4">Jetpack Compose + Material 3</string>
+    <string name="oss_c5">Tink (envelope encryption)</string>
+    <string name="oss_c6">ZXing core (QR codes)</string>
+    <string name="oss_lic_agpl">AGPL-3.0-or-later</string>
+    <string name="oss_lic_isc">ISC</string>
+    <string name="oss_lic_spake2">ISC / Apache-2.0 / MIT / public domain (per file)</string>
+    <string name="oss_lic_apache">Apache-2.0</string>
+    <string name="oss_footnote">All cryptography draws randomness exclusively from the OS CSPRNG; third-party crypto code is vendored or version-pinned, keeping builds network-free (§8/§10).</string>
 </resources>

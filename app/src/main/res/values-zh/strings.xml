@@ -129,4 +129,30 @@
     <string name="swx_e_crypto_saved">解不开:粘错会话,或对方未保存此会话(单方保存无效,请重新配对)</string>
     <string name="swx_e_crypto_live">解不开:这不是发到本会话的密文</string>
     <string name="swx_decrypt_failed_code">解密失败(%1$s)</string>
+
+    <!-- home three-dot menu (Shizuku-style) -->
+    <string name="menu_open_source">开放源代码</string>
+    <string name="menu_about">关于</string>
+
+    <!-- about page -->
+    <string name="about_tagline">端到端、两端平等、默认零状态。\n在任何 IM 里互传密文——服务器全程只见密文,密钥只属于会话两端。</string>
+    <string name="about_version">版本 %1$s</string>
+    <string name="about_github">GitHub 仓库</string>
+    <string name="license_label">许可证</string>
+    <string name="license_value">AGPL-3.0-or-later</string>
+
+    <!-- open source page -->
+    <string name="oss_intro">火漆是自由软件,许可证 AGPL-3.0-or-later:任何人可自由使用、研读、修改、再分发;若用它提供网络服务,服务端同样必须开源。不提供任何担保。</string>
+    <string name="oss_components_header">组件与许可证</string>
+    <string name="oss_c1">Sealing Wax 协议核心(自研,core/)</string>
+    <string name="oss_c2">libsodium 1.0.22(源码入仓)</string>
+    <string name="oss_c3">spake2(BoringSSL 移植,经 spake2-c)</string>
+    <string name="oss_c4">Jetpack Compose + Material 3</string>
+    <string name="oss_c5">Tink(信封加密)</string>
+    <string name="oss_c6">ZXing core(二维码)</string>
+    <string name="oss_lic_agpl">AGPL-3.0-or-later</string>
+    <string name="oss_lic_isc">ISC</string>
+    <string name="oss_lic_spake2">ISC / Apache-2.0 / MIT / 公共领域(按文件)</string>
+    <string name="oss_lic_apache">Apache-2.0</string>
+    <string name="oss_footnote">全部密码学库只从操作系统 CSPRNG 取随机数;第三方密码学代码源码入仓或锁定版本,构建零网络依赖(§8/§10)。</string>
 </resources>

@@ -33,10 +33,13 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -82,6 +85,8 @@ fun HomeScreen(
     onOpenSession: (String) -> Unit,
     onRenameSession: (SavedSession, String) -> Unit,
     onDeleteSession: (SavedSession) -> Unit,
+    onOpenSource: () -> Unit,
+    onAbout: () -> Unit,
 ) {
     val context = LocalContext.current
     var fabExpanded by remember { mutableStateOf(false) }
@@ -113,13 +118,38 @@ fun HomeScreen(
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             Column(Modifier.fillMaxSize()) {
-                /* Shizuku/KernelSU 式顶栏:应用名即标题(app_name 随系统语言) */
-                Text(
-                    stringResource(R.string.app_name),
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(start = 16.dp, top = 24.dp, end = 16.dp, bottom = 12.dp),
-                )
+                /* Shizuku/KernelSU 式顶栏:应用名即标题 + 右上竖三点菜单 */
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        stringResource(R.string.app_name),
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(start = 16.dp, top = 24.dp, bottom = 12.dp),
+                    )
+                    var menuOpen by remember { mutableStateOf(false) }
+                    IconButton(
+                        onClick = { menuOpen = true },
+                        modifier = Modifier.padding(top = 12.dp, end = 8.dp),
+                    ) {
+                        Icon(
+                            Icons.Default.MoreVert,
+                            contentDescription = stringResource(R.string.chat_menu_cd),
+                        )
+                    }
+                    /* Shizuku 同款下拉:开放源代码在上,关于在下(§9) */
+                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.menu_open_source)) },
+                            onClick = { menuOpen = false; onOpenSource() },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.menu_about)) },
+                            onClick = { menuOpen = false; onAbout() },
+                        )
+                    }
+                }
                 Box(Modifier.weight(1f).fillMaxWidth()) {
                     when (state) {
                         SessionListState.Loading -> Column(
