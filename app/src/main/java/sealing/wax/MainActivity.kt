@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -103,6 +104,11 @@ private fun App() {
         dest = Dest.Home
         reload()
     }
+
+    /* 冷启动/Activity 重建后的首次组合必须加载会话列表:此前 reload() 只在
+     * goHome() 导航路径上运行,杀进程重开(或旋转)后首页永远空白——
+     * 保存的对话"消失"实为列表未读盘(真机反馈 2026-11,§11-5 回归) */
+    LaunchedEffect(Unit) { reload() }
 
     when (dest) {
         Dest.Home -> {
