@@ -35,13 +35,16 @@ object WaxNative {
     /** SWX_ROLE_INVITER = 1, SWX_ROLE_RESPONDER = 2, 0 when dead. */
     external fun sessionRole(h: Long): Int
 
-    /** Invite code (base64, 72 chars) for the peer to paste. */
-    external fun invite(h: Long): String
+    /** Invite code (base64, 44 chars): 32B headerless SPAKE2 share, blinded
+     *  by the 暗号. The 暗号 never crosses the wire. */
+    external fun invite(h: Long, secret: ByteArray): String
 
-    /** Consumes the invite, returns the reply code (base64, 72 chars). */
-    external fun reply(h: Long, inviteB64: String): String
+    /** Consumes the invite with the SAME 暗号, returns the reply code
+     *  (base64, 88 chars): 32B share || 32B HKDF confirm. */
+    external fun reply(h: Long, inviteB64: String, secret: ByteArray): String
 
-    /** Consumes the reply; the session is established afterwards. */
+    /** Consumes the reply; verifies the confirm — a mismatched 暗号
+     *  throws SWX_E_CRYPTO here. Established afterwards. */
     external fun finish(h: Long, replyB64: String)
 
     /** 9 decimal digits (3-3-3 grouping is a UI concern). */

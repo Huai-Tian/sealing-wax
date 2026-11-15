@@ -37,9 +37,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Attachment
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -100,11 +101,14 @@ fun ChatScreen(
     var paste by remember { mutableStateOf("") }
     var openNote by remember { mutableStateOf<String?>(null) }
     var menuOpen by remember { mutableStateOf(false) }
+    var sasOpen by remember { mutableStateOf(false) }
     var saveDialog by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf<String?>(null) }
     var pendingSwx by remember { mutableStateOf<Uri?>(null) }
     var swxVerdict by remember { mutableStateOf<String?>(null) }
     var swxHash by remember { mutableStateOf<ByteArray?>(null) }
+
+    val sas = SessionManager.sas
 
     val listState = rememberLazyListState()
     LaunchedEffect(SessionManager.messages.size) {
@@ -239,8 +243,19 @@ fun ChatScreen(
                     }
                 },
                 actions = {
+                    /* SAS 常驻仪表盘(§9):一直在,不需要点出来;点击放大核对 */
+                    if (sas != null && sas.length == 9) {
+                        TextButton(onClick = { sasOpen = true }) {
+                            Text(
+                                "${sas.substring(0, 3)} ${sas.substring(3, 6)} ${sas.substring(6, 9)}",
+                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                style = MaterialTheme.typography.labelLarge,
+                            )
+                        }
+                    }
+                    /* 通用菜单(三横线):后期可承载更多设置项 */
                     IconButton(onClick = { menuOpen = true }) {
-                        Icon(Icons.Default.Shield, contentDescription = "更多")
+                        Icon(Icons.Default.Menu, contentDescription = "更多")
                     }
                     DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                         DropdownMenuItem(
@@ -401,6 +416,38 @@ fun ChatScreen(
                 }
             }
         }
+    }
+
+    /* SAS 放大核对(§9 仪表盘的放大卡片:大字+二维码+复制) */
+    if (sasOpen && sas != null) {
+        AlertDialog(
+            onDismissRequest = { sasOpen = false },
+            title = { Text("身份验证码") },
+            text = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        "电话念码或当面扫码。对不上 = 立即中止会话。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    SasDigits(sas)
+                    QrCode(content = sas)
+                    TextButton(onClick = {
+                        clipboard.setText(AnnotatedString(sas))
+                    }) {
+                        Icon(Icons.Default.ContentCopy, contentDescription = null)
+                        Text("复制验证码")
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { sasOpen = false }) { Text("关闭") }
+            },
+        )
     }
 
     /* exit: save-or-discard (unsaved only; §5/§6) */

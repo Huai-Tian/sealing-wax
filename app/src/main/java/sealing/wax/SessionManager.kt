@@ -91,32 +91,45 @@ object SessionManager {
     var pairing: Boolean = false
         private set
 
-    /* ---- pairing (§5) ---- */
+    /** Current conversation's SAS (9 digits) — live pairing value or the
+     *  persisted value of a saved session; null when unknown (old saves). */
+    var sas: String? = null
+        private set
 
-    fun startInvite(): String {
+    /* ---- pairing (§5; PAKE 暗号认证) ---- */
+
+    fun startInvite(secret: ByteArray): String {
         freeConversation()
         handle = WaxNative.createSession(true)
         pairing = true
-        return WaxNative.invite(handle)
+        sas = null
+        return WaxNative.invite(handle, secret)
     }
 
-    fun startJoin(inviteB64: String): String {
+    fun startJoin(inviteB64: String, secret: ByteArray): String {
         freeConversation()
         handle = WaxNative.createSession(false)
         pairing = true
-        return WaxNative.reply(handle, inviteB64.trim())
+        sas = null
+        return WaxNative.reply(handle, inviteB64.trim(), secret)
     }
 
     fun completeInvite(replyB64: String) {
         check(pairing && handle != 0L) { "配对流程状态错误" }
         WaxNative.finish(handle, replyB64.trim())
+        sas = WaxNative.sas(handle)
     }
 
     fun sas(): String = WaxNative.sas(handle)
 
-    /** After SAS confirmation: the live unsaved conversation starts here. */
+    /** After pairing: the live unsaved conversation starts here. The SAS is
+     *  captured from the live session (responder side pairs at reply time
+     *  and reaches this entry without completeInvite). */
     fun beginConversation() {
         pairing = false
+        if (sas == null && handle != 0L) {
+            sas = runCatching { WaxNative.sas(handle) }.getOrNull()
+        }
         messages.clear()
     }
 
@@ -132,6 +145,7 @@ object SessionManager {
         val c = Persistence.readCounters(context, id)
         handle = WaxNative.importState(s.stateBlob, c[0], c[1])
         saved = s
+        sas = s.sas.ifBlank { null }    /* §6: persisted identity fingerprint */
         WaxNative.setPadding(handle, s.padOn, s.padThreshold)
         /* prepay a send-number segment; skipping numbers is harmless (§4) */
         Persistence.writeCounters(context, id, c[0] + PREPAY, c[1])
@@ -180,6 +194,7 @@ object SessionManager {
             id = UUID.randomUUID().toString().replace("-", "").substring(0, 16),
             name = name,
             role = WaxNative.sessionRole(handle),
+            sas = sas ?: "",
             padOn = paddingEnabled,
             padThreshold = paddingThreshold,
             createdMs = System.currentTimeMillis(),
@@ -205,6 +220,7 @@ object SessionManager {
         prepaidEnd = 0
         dirty = false
         pairing = false
+        sas = null
         pendingPieces.clear()
         messages.clear()
     }

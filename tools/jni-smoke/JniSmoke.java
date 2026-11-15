@@ -7,17 +7,55 @@ public class JniSmoke {
     }
 
     public static void main(String[] args) throws Exception {
-        /* pairing */
+        byte[] secret = "火漆配对暗号".getBytes("UTF-8");
+
+        /* pairing (PAKE): invite = 32B share (44 chars), reply = 64B
+         * share||confirm (88 chars) */
         long a = WaxNative.createSession(true);
         long b = WaxNative.createSession(false);
         check(WaxNative.sessionRole(a) == 1, "role a");
-        String inv = WaxNative.invite(a);
-        check(inv != null && inv.length() == 72, "invite b64 len=" + (inv == null ? -1 : inv.length()));
-        String rep = WaxNative.reply(b, inv);
-        check(rep != null && rep.length() == 72, "reply b64 len");
+        String inv = WaxNative.invite(a, secret);
+        check(inv != null && inv.length() == 44, "invite b64 len=" + (inv == null ? -1 : inv.length()));
+        String rep = WaxNative.reply(b, inv, secret);
+        check(rep != null && rep.length() == 88, "reply b64 len=" + (rep == null ? -1 : rep.length()));
         WaxNative.finish(a, rep);
         String sasA = WaxNative.sas(a), sasB = WaxNative.sas(b);
         check(sasA != null && sasA.equals(sasB) && sasB.length() == 9, "sas equal");
+
+        /* wrong 暗号: B replies fine locally, A's finish must reject */
+        long w1 = WaxNative.createSession(true);
+        long w2 = WaxNative.createSession(false);
+        String wInv = WaxNative.invite(w1, secret);
+        byte[] badSecret = "错误的暗号".getBytes("UTF-8");
+        String wRep = WaxNative.reply(w2, wInv, badSecret);
+        check(wRep != null && wRep.length() == 88, "wrong-secret reply produced");
+        try {
+            WaxNative.finish(w1, wRep);
+            check(false, "wrong secret must throw");
+        } catch (IllegalStateException e) {
+            check("SWX_E_CRYPTO".equals(e.getMessage()), "wrong secret code " + e.getMessage());
+        }
+        WaxNative.freeSession(w1);
+        WaxNative.freeSession(w2);
+
+        /* length confusion on FRESH sessions: invite pasted as reply and
+         * reply pasted as invite (lengths are the only format) */
+        long f1 = WaxNative.createSession(true);
+        long f2 = WaxNative.createSession(false);
+        try {
+            WaxNative.finish(f1, inv);
+            check(false, "invite-as-reply must throw");
+        } catch (IllegalStateException e) {
+            check("SWX_E_FORMAT".equals(e.getMessage()), "invite-as-reply code " + e.getMessage());
+        }
+        try {
+            WaxNative.reply(f2, rep, secret);
+            check(false, "reply-as-invite must throw");
+        } catch (IllegalStateException e) {
+            check("SWX_E_FORMAT".equals(e.getMessage()), "reply-as-invite code " + e.getMessage());
+        }
+        WaxNative.freeSession(f1);
+        WaxNative.freeSession(f2);
 
         /* text roundtrip */
         byte[] msg = "hello 火漆 via JNI".getBytes("UTF-8");

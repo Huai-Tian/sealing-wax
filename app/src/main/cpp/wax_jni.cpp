@@ -22,13 +22,12 @@
 #include <cstdlib>
 #include <cstring>
 
+#include <sodium.h>
+
 #include "swx_hash.h"
 #include "swx_session.h"
 
 #define JNI_CLASS_PATH "sealing/wax/bridge/WaxNative"
-
-/* base64 capacity for one invite/reply frame, including the NUL */
-#define B64_INVITE_CAP (((SWX_INVITE_FRAME_LEN + 2) / 3) * 4 + 1)
 
 static void throw_swx(JNIEnv *env, int code)
 {
@@ -94,19 +93,46 @@ Java_sealing_wax_bridge_WaxNative_sessionRole(JNIEnv *, jclass, jlong h)
 
 /* ---- pairing ---- */
 
-extern "C" JNIEXPORT jstring JNICALL
-Java_sealing_wax_bridge_WaxNative_invite(JNIEnv *env, jclass, jlong h)
+/* base64 capacity for pairing codes, including the NUL: invite = 32B
+ * share (44 chars), reply = 64B share||confirm (88 chars) */
+#define B64_PAIR_CAP (SWX_PAIR_REPLY_LEN * 4 / 3 + 8)
+
+/* copies a jbyteArray into a bounded stack buffer; -1 on bad args */
+static int secret_to_buf(JNIEnv *env, jbyteArray secret,
+                         uint8_t *buf, size_t cap, size_t *out_len)
 {
-    uint8_t wire[SWX_INVITE_FRAME_LEN];
-    char b64[B64_INVITE_CAP];
-    size_t n = 0;
-    int ret = swx_session_invite((const swx_session *) (intptr_t) h,
-                                 wire, sizeof wire, &n);
-    if (ret != SWX_OK) {
-        throw_swx(env, ret);
+    jsize n = env->GetArrayLength(secret);
+    if (n < 1 || (size_t) n > cap) {
+        return SWX_E_ARG;
+    }
+    env->GetByteArrayRegion(secret, 0, n, (jbyte *) buf);
+    *out_len = (size_t) n;
+    return SWX_OK;
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_sealing_wax_bridge_WaxNative_invite(JNIEnv *env, jclass, jlong h,
+                                         jbyteArray secret)
+{
+    uint8_t sec[SWX_PAIR_SECRET_MAX];
+    uint8_t wire[SWX_PAIR_MSG_LEN];
+    char b64[B64_PAIR_CAP];
+    size_t sec_len = 0, n = 0;
+    int ret;
+
+    if (secret == NULL) {
+        throw_swx(env, SWX_E_ARG);
         return NULL;
     }
-    ret = swx_b64_encode(b64, sizeof b64, wire, n);
+    ret = secret_to_buf(env, secret, sec, sizeof sec, &sec_len);
+    if (ret == SWX_OK) {
+        ret = swx_session_invite((swx_session *) (intptr_t) h,
+                                 sec, sec_len, wire, sizeof wire, &n);
+    }
+    if (ret == SWX_OK) {
+        ret = swx_b64_encode(b64, sizeof b64, wire, n);
+    }
+    sodium_memzero(sec, sizeof sec);
     if (ret != SWX_OK) {
         throw_swx(env, ret);
         return NULL;
@@ -116,7 +142,7 @@ Java_sealing_wax_bridge_WaxNative_invite(JNIEnv *env, jclass, jlong h)
 
 extern "C" JNIEXPORT jstring JNICALL
 Java_sealing_wax_bridge_WaxNative_reply(JNIEnv *env, jclass, jlong h,
-                                        jstring invite_b64)
+                                        jstring invite_b64, jbyteArray secret)
 {
     const char *inv = env->GetStringUTFChars(invite_b64, NULL);
     if (inv == NULL) {
@@ -124,9 +150,10 @@ Java_sealing_wax_bridge_WaxNative_reply(JNIEnv *env, jclass, jlong h,
     }
     size_t inv_len = strlen(inv);
     uint8_t *wire = (uint8_t *) malloc(inv_len ? inv_len : 1);
-    uint8_t rwire[SWX_INVITE_FRAME_LEN];
-    char rb64[B64_INVITE_CAP];
-    size_t wire_len = 0, rlen = 0;
+    uint8_t sec[SWX_PAIR_SECRET_MAX];
+    uint8_t rwire[SWX_PAIR_REPLY_LEN];
+    char rb64[B64_PAIR_CAP];
+    size_t wire_len = 0, sec_len = 0, rlen = 0;
     jstring out = NULL;
     int ret;
 
@@ -136,9 +163,15 @@ Java_sealing_wax_bridge_WaxNative_reply(JNIEnv *env, jclass, jlong h,
         return NULL;
     }
     ret = swx_b64_decode(wire, inv_len, &wire_len, inv, inv_len);
+    if (ret == SWX_OK && secret != NULL) {
+        ret = secret_to_buf(env, secret, sec, sizeof sec, &sec_len);
+    } else if (ret == SWX_OK) {
+        ret = SWX_E_ARG;
+    }
     if (ret == SWX_OK) {
         ret = swx_session_reply((swx_session *) (intptr_t) h,
-                                wire, wire_len, rwire, sizeof rwire, &rlen);
+                                sec, sec_len, wire, wire_len,
+                                rwire, sizeof rwire, &rlen);
     }
     if (ret == SWX_OK) {
         ret = swx_b64_encode(rb64, sizeof rb64, rwire, rlen);
@@ -148,6 +181,7 @@ Java_sealing_wax_bridge_WaxNative_reply(JNIEnv *env, jclass, jlong h,
     } else {
         throw_swx(env, ret);
     }
+    sodium_memzero(sec, sizeof sec);
     free(wire);
     env->ReleaseStringUTFChars(invite_b64, inv);
     return out;

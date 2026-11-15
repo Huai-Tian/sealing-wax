@@ -14,6 +14,8 @@
 #include <sodium.h>
 #include <string.h>
 
+#include "spake2.h"
+
 /* ---- byte helpers ---- */
 
 static void put32be(uint8_t *p, uint32_t v)
@@ -77,7 +79,13 @@ static size_t pad_strip(const uint8_t *pt, size_t len)
     return len;
 }
 
-/* ---- key derivation (§4) ---- */
+/* ---- key derivation (§4; 2026-11 PAKE 化) ---- */
+
+/* Transcript-bound SPAKE2 identities: role strings bind the blinding
+ * direction (inviter = alice/M, responder = bob/N) so a reflected share can
+ * never complete a pairing against itself with swapped roles. */
+#define SWX_NAME_INVITER   "swx-inviter"
+#define SWX_NAME_RESPONDER "swx-responder"
 
 int swx_msg_key(uint8_t out[32], const uint8_t session_key[32],
                 uint8_t dir, uint64_t counter)
@@ -110,49 +118,29 @@ static int mask_keystream(uint8_t out[SWX_MASK_LEN],
     return SWX_OK;
 }
 
-static int derive(swx_session *s, const uint8_t peer_pk[SWX_PUBKEY_LEN],
-                  const uint8_t peer_salt[SWX_SALT_LEN])
+/* Key schedule from the 64B SPAKE2 output (pake_raw = HKDF PRK input):
+ *
+ *   session_key = HKDF-Expand(pake_raw, "session" || suite, 32)
+ *   sas         = HKDF-Expand(pake_raw, "sas") -> rejection-sampled 9 digits
+ *   confirm     = HKDF-Expand(pake_raw, "confirm", 32)   (reply frames only)
+ */
+static int derive(swx_session *s, const uint8_t pake_raw[64])
 {
-    uint8_t shared[32];
-    uint8_t prk[crypto_kdf_hkdf_sha256_KEYBYTES];
-    uint8_t salt[2 * SWX_SALT_LEN];
     uint8_t sas_raw[64];
     uint8_t info[8];
-    int ret = SWX_E_CRYPTO;
     int ok = 0;
 
-    /* shared = X25519(sk, peer_pk); reject degenerate results */
-    if (crypto_scalarmult(shared, s->sk, peer_pk) != 0 ||
-        sodium_is_zero(shared, sizeof shared)) {
-        goto out;
-    }
-
-    /* salt = inviter_salt || responder_salt: role-ordered, both ends agree */
-    if (s->role == SWX_ROLE_INVITER) {
-        memcpy(salt, s->salt_own, SWX_SALT_LEN);
-        memcpy(salt + SWX_SALT_LEN, peer_salt, SWX_SALT_LEN);
-    } else {
-        memcpy(salt, peer_salt, SWX_SALT_LEN);
-        memcpy(salt + SWX_SALT_LEN, s->salt_own, SWX_SALT_LEN);
-    }
-    if (crypto_kdf_hkdf_sha256_extract(prk, salt, sizeof salt,
-                                       shared, sizeof shared) != 0) {
-        goto out;
-    }
-
-    /* session_key = HKDF-Expand(prk, "session" || suite, 32) */
     memcpy(info, "session", 7);
     info[7] = s->suite;
     if (crypto_kdf_hkdf_sha256_expand(s->session_key, 32,
                                       (const char *) info, sizeof info,
-                                      prk) != 0) {
-        goto out;
+                                      pake_raw) != 0) {
+        return SWX_E_CRYPTO;
     }
 
-    /* sas = HKDF-Expand(prk, "sas") -> rejection sampling -> 9 digits */
     if (crypto_kdf_hkdf_sha256_expand(sas_raw, sizeof sas_raw, "sas", 3,
-                                      prk) != 0) {
-        goto out;
+                                      pake_raw) != 0) {
+        return SWX_E_CRYPTO;
     }
     for (size_t off = 0; off + 4 <= sizeof sas_raw; off += 4) {
         uint32_t v = ((uint32_t) sas_raw[off] << 24) |
@@ -170,24 +158,39 @@ static int derive(swx_session *s, const uint8_t peer_pk[SWX_PUBKEY_LEN],
             break;
         }
     }
+    sodium_memzero(sas_raw, sizeof sas_raw);
     if (!ok) {
-        goto out;    /* probability ~5e-19; fail closed */
+        return SWX_E_CRYPTO;  /* probability ~5e-19; fail closed */
     }
 
     s->state = SWX_ST_ESTABLISHED;
-    ret = SWX_OK;
+    return SWX_OK;
+}
 
-out:
-    sodium_memzero(shared, sizeof shared);
-    sodium_memzero(prk, sizeof prk);
-    sodium_memzero(sas_raw, sizeof sas_raw);
-    if (ok) {
-        /* pairing material is dead: only the session key survives */
-        sodium_memzero(s->sk, sizeof s->sk);
-        sodium_memzero(s->salt_own, sizeof s->salt_own);
-        sodium_memzero(s->salt_peer, sizeof s->salt_peer);
+/* Reply-frame confirm value (composition ON TOP of the vendored library;
+ * README_AGENT.md §4/§15). */
+static int confirm_calc(uint8_t out[SWX_PAIR_CONFIRM_LEN],
+                        const uint8_t pake_raw[64])
+{
+    if (crypto_kdf_hkdf_sha256_expand(out, SWX_PAIR_CONFIRM_LEN, "confirm", 7,
+                                      pake_raw) != 0) {
+        return SWX_E_CRYPTO;
     }
-    return ret;
+    return SWX_OK;
+}
+
+/* The vendored SPAKE2 context is malloc'd outside the sodium guarded heap;
+ * zero it in place before releasing (it holds the ephemeral and password
+ * scalars while a pairing is in flight) — 配对即焚, §2 内存纪律. */
+static void spake_burn(swx_session *s)
+{
+    struct spake2_ctx_st *ctx = (struct spake2_ctx_st *) s->spake;
+    if (ctx == NULL) {
+        return;
+    }
+    sodium_memzero(ctx, sizeof *ctx);
+    SPAKE2_CTX_free(ctx);
+    s->spake = NULL;
 }
 
 /* ---- lifecycle ---- */
@@ -211,6 +214,8 @@ static int session_alloc(swx_session **out)
 int swx_session_create(swx_session **out, int as_inviter)
 {
     swx_session *s = NULL;
+    struct spake2_ctx_st *ctx;
+    const char *my_name, *their_name;
     int ret = session_alloc(&s);
     if (ret != SWX_OK) {
         return ret;
@@ -220,12 +225,25 @@ int swx_session_create(swx_session **out, int as_inviter)
     s->suite = SWX_SUITE_CHACHA;
     s->pad_threshold = 1000;
     s->send_next = 1;    /* counter 0 is never used (hwm starts at 0) */
-    randombytes_buf(s->sk, sizeof s->sk);
-    if (crypto_scalarmult_base(s->pk, s->sk) != 0) {
-        sodium_free(s);
-        return SWX_E_CRYPTO;
+
+    if (s->role == SWX_ROLE_INVITER) {
+        my_name = SWX_NAME_INVITER;
+        their_name = SWX_NAME_RESPONDER;
+        ctx = SPAKE2_CTX_new(spake2_role_alice,
+                             (const uint8_t *) my_name, strlen(my_name),
+                             (const uint8_t *) their_name, strlen(their_name));
+    } else {
+        my_name = SWX_NAME_RESPONDER;
+        their_name = SWX_NAME_INVITER;
+        ctx = SPAKE2_CTX_new(spake2_role_bob,
+                             (const uint8_t *) my_name, strlen(my_name),
+                             (const uint8_t *) their_name, strlen(their_name));
     }
-    randombytes_buf(s->salt_own, sizeof s->salt_own);
+    if (ctx == NULL) {
+        sodium_free(s);
+        return SWX_E_LEN;
+    }
+    s->spake = ctx;
     *out = s;
     return SWX_OK;
 }
@@ -240,6 +258,7 @@ void swx_session_wipe(swx_session *s)
     if (s == NULL) {
         return;
     }
+    spake_burn(s);    /* in-flight pairing material dies with the session */
     if (s->reasm != NULL) {
         sodium_memzero(s->reasm, sizeof *s->reasm);
         sodium_free(s->reasm);
@@ -258,79 +277,148 @@ void swx_session_free(swx_session *s)
     sodium_free(s);
 }
 
-/* ---- pairing ---- */
+/* ---- pairing (§4 PAKE 化: 暗号 in, headerless shares out) ---- */
 
-int swx_session_invite(const swx_session *s,
+static int secret_check(const uint8_t *secret, size_t secret_len)
+{
+    if (secret == NULL || secret_len == 0 || secret_len > SWX_PAIR_SECRET_MAX) {
+        return SWX_E_ARG;
+    }
+    return SWX_OK;
+}
+
+int swx_session_invite(swx_session *s,
+                       const uint8_t *secret, size_t secret_len,
                        uint8_t *out, size_t out_cap, size_t *out_len)
 {
-    swx_frame f;
+    struct spake2_ctx_st *ctx;
+    size_t n = 0;
+    int ret;
+
     if (s == NULL || out == NULL || out_len == NULL) {
+        return SWX_E_ARG;
+    }
+    if ((ret = secret_check(secret, secret_len)) != SWX_OK) {
+        return ret;
+    }
+    if (s->state != SWX_ST_NEW || s->role != SWX_ROLE_INVITER) {
+        return SWX_E_STATE;
+    }
+    if (out_cap < SWX_PAIR_MSG_LEN) {
+        return SWX_E_LEN;
+    }
+    ctx = (struct spake2_ctx_st *) s->spake;
+    if (ctx == NULL) {
+        return SWX_E_STATE;
+    }
+    if (SPAKE2_generate_msg(ctx, out, &n, SWX_PAIR_MSG_LEN,
+                            secret, secret_len) != 1) {
+        return SWX_E_CRYPTO;
+    }
+    *out_len = n;    /* SWX_PAIR_MSG_LEN */
+    return SWX_OK;
+}
+
+int swx_session_reply(swx_session *s,
+                      const uint8_t *secret, size_t secret_len,
+                      const uint8_t *invite, size_t invite_len,
+                      uint8_t *out, size_t out_cap, size_t *out_len)
+{
+    struct spake2_ctx_st *ctx;
+    uint8_t pake_raw[SPAKE2_MAX_KEY_SIZE];
+    uint8_t confirm[SWX_PAIR_CONFIRM_LEN];
+    size_t n = 0, key_len = 0;
+    int ret;
+
+    if (s == NULL || invite == NULL || out == NULL || out_len == NULL) {
+        return SWX_E_ARG;
+    }
+    if ((ret = secret_check(secret, secret_len)) != SWX_OK) {
+        return ret;
+    }
+    if (s->state != SWX_ST_NEW || s->role != SWX_ROLE_RESPONDER) {
+        return SWX_E_STATE;
+    }
+    if (invite_len != SWX_PAIR_MSG_LEN) {
+        return SWX_E_FORMAT;
+    }
+    if (out_cap < SWX_PAIR_REPLY_LEN) {
+        return SWX_E_LEN;
+    }
+    ctx = (struct spake2_ctx_st *) s->spake;
+    if (ctx == NULL) {
+        return SWX_E_STATE;
+    }
+
+    /* B's own share first, then the DH over A's share. A wrong 暗号 is
+     * undetectable HERE (garbage keys, no confirmation path to B) — the
+     * inviter's finish() rejects it and the first AEAD message settles
+     * the rest (§4/§15). */
+    if (SPAKE2_generate_msg(ctx, out, &n, SWX_PAIR_MSG_LEN,
+                            secret, secret_len) != 1) {
+        return SWX_E_CRYPTO;
+    }
+    if (SPAKE2_process_msg(ctx, pake_raw, &key_len, sizeof pake_raw,
+                           invite, invite_len) != 1) {
+        return SWX_E_CRYPTO;
+    }
+    if ((ret = confirm_calc(confirm, pake_raw)) != SWX_OK ||
+        (ret = derive(s, pake_raw)) != SWX_OK) {
+        sodium_memzero(pake_raw, sizeof pake_raw);
+        return ret;
+    }
+    memcpy(out + SWX_PAIR_MSG_LEN, confirm, SWX_PAIR_CONFIRM_LEN);
+    *out_len = SWX_PAIR_REPLY_LEN;
+
+    sodium_memzero(pake_raw, sizeof pake_raw);
+    sodium_memzero(confirm, sizeof confirm);
+    spake_burn(s);    /* responder burns pairing material immediately */
+    return SWX_OK;
+}
+
+int swx_session_finish(swx_session *s, const uint8_t *reply, size_t reply_len)
+{
+    struct spake2_ctx_st *ctx;
+    uint8_t pake_raw[SPAKE2_MAX_KEY_SIZE];
+    uint8_t confirm[SWX_PAIR_CONFIRM_LEN];
+    size_t key_len = 0;
+    int ret;
+
+    if (s == NULL || reply == NULL) {
         return SWX_E_ARG;
     }
     if (s->state != SWX_ST_NEW || s->role != SWX_ROLE_INVITER) {
         return SWX_E_STATE;
     }
-    memset(&f, 0, sizeof f);
-    f.type = SWX_TYPE_INVITE;
-    f.suite = s->suite;
-    f.pubkey = s->pk;
-    f.salt = s->salt_own;
-    return swx_frame_encode(out, out_cap, out_len, &f);
-}
-
-static int consume_handshake(swx_session *s, uint8_t expect_type,
-                             const uint8_t *wire, size_t wire_len,
-                             swx_frame *view)
-{
-    int ret;
-    if (s == NULL || wire == NULL) {
-        return SWX_E_ARG;
+    if (reply_len != SWX_PAIR_REPLY_LEN) {
+        return SWX_E_FORMAT;
     }
-    if (s->state != SWX_ST_NEW) {
+    ctx = (struct spake2_ctx_st *) s->spake;
+    if (ctx == NULL) {
         return SWX_E_STATE;
     }
-    if ((ret = swx_frame_decode(view, wire, wire_len)) != SWX_OK) {
-        return ret;
-    }
-    if (view->type != expect_type) {
-        return SWX_E_TYPE;
-    }
-    if (memcmp(view->pubkey, s->pk, SWX_PUBKEY_LEN) == 0) {
-        return SWX_E_STATE;    /* our own frame pasted back */
-    }
-    return SWX_OK;
-}
 
-int swx_session_reply(swx_session *s,
-                      const uint8_t *invite, size_t invite_len,
-                      uint8_t *out, size_t out_cap, size_t *out_len)
-{
-    swx_frame view, f;
-    int ret = consume_handshake(s, SWX_TYPE_INVITE, invite, invite_len, &view);
-    if (ret != SWX_OK) {
+    if (SPAKE2_process_msg(ctx, pake_raw, &key_len, sizeof pake_raw,
+                           reply, SWX_PAIR_MSG_LEN) != 1) {
+        return SWX_E_CRYPTO;
+    }
+    if ((ret = confirm_calc(confirm, pake_raw)) != SWX_OK) {
+        sodium_memzero(pake_raw, sizeof pake_raw);
         return ret;
     }
-    /* encode first: derive() wipes the salt this frame must still carry */
-    memset(&f, 0, sizeof f);
-    f.type = SWX_TYPE_REPLY;
-    f.suite = s->suite;
-    f.pubkey = s->pk;
-    f.salt = s->salt_own;
-    ret = swx_frame_encode(out, out_cap, out_len, &f);
-    if (ret != SWX_OK) {
-        return ret;
+    /* 暗号一致性在这里裁决:confirm 不匹配 = 双端密钥不同,永不建立 */
+    if (sodium_memcmp(confirm, reply + SWX_PAIR_MSG_LEN,
+                      SWX_PAIR_CONFIRM_LEN) != 0) {
+        sodium_memzero(pake_raw, sizeof pake_raw);
+        sodium_memzero(confirm, sizeof confirm);
+        return SWX_E_CRYPTO;
     }
-    return derive(s, view.pubkey, view.salt);
-}
+    ret = derive(s, pake_raw);
 
-int swx_session_finish(swx_session *s, const uint8_t *reply, size_t reply_len)
-{
-    swx_frame view;
-    int ret = consume_handshake(s, SWX_TYPE_REPLY, reply, reply_len, &view);
-    if (ret != SWX_OK) {
-        return ret;
-    }
-    return derive(s, view.pubkey, view.salt);
+    sodium_memzero(pake_raw, sizeof pake_raw);
+    sodium_memzero(confirm, sizeof confirm);
+    spake_burn(s);    /* inviter burns pairing material on completion */
+    return ret;
 }
 
 int swx_session_sas(const swx_session *s, char out[SWX_SAS_DIGITS + 1])

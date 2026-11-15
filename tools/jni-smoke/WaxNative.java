@@ -7,8 +7,8 @@ public class WaxNative {
     public static native long createSession(boolean asInviter);
     public static native void freeSession(long h);
     public static native int sessionRole(long h);
-    public static native String invite(long h);
-    public static native String reply(long h, String inviteB64);
+    public static native String invite(long h, byte[] secret);
+    public static native String reply(long h, String inviteB64, byte[] secret);
     public static native void finish(long h, String replyB64);
     public static native String sas(long h);
     public static native void setPadding(long h, boolean enabled, int thresholdB64);

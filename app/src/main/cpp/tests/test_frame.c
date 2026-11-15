@@ -24,60 +24,6 @@ static int failures = 0;
     }                                                                        \
 } while (0)
 
-static int test_invite_roundtrip(void)
-{
-    uint8_t pub[SWX_PUBKEY_LEN], salt[SWX_SALT_LEN];
-    uint8_t wire[SWX_INVITE_FRAME_LEN], wire2[128];
-    size_t n = 0;
-
-    for (int i = 0; i < SWX_PUBKEY_LEN; i++) pub[i] = (uint8_t) i;
-    for (int i = 0; i < SWX_SALT_LEN; i++) salt[i] = (uint8_t) (0xA0 ^ i);
-
-    swx_frame f;
-    memset(&f, 0, sizeof f);
-    f.type = SWX_TYPE_INVITE;
-    f.suite = SWX_SUITE_CHACHA;
-    f.pubkey = pub;
-    f.salt = salt;
-
-    CHECK(swx_frame_encode(wire, sizeof wire, &n, &f) == SWX_OK);
-    CHECK(n == SWX_INVITE_FRAME_LEN);
-    CHECK(memcmp(wire, "SWX1", 4) == 0);
-    CHECK(wire[4] == SWX_TYPE_INVITE);
-    CHECK(wire[5] == SWX_SUITE_CHACHA);
-    CHECK(memcmp(wire + 6, pub, SWX_PUBKEY_LEN) == 0);
-    CHECK(memcmp(wire + 6 + SWX_PUBKEY_LEN, salt, SWX_SALT_LEN) == 0);
-
-    swx_frame g;
-    CHECK(swx_frame_decode(&g, wire, n) == SWX_OK);
-    CHECK(g.type == SWX_TYPE_INVITE);
-    CHECK(g.suite == SWX_SUITE_CHACHA);
-    CHECK(memcmp(g.pubkey, pub, SWX_PUBKEY_LEN) == 0);
-    CHECK(memcmp(g.salt, salt, SWX_SALT_LEN) == 0);
-
-    /* reply type roundtrip */
-    f.type = SWX_TYPE_REPLY;
-    CHECK(swx_frame_encode(wire2, sizeof wire2, &n, &f) == SWX_OK);
-    CHECK(n == SWX_INVITE_FRAME_LEN);
-    CHECK(swx_frame_decode(&g, wire2, n) == SWX_OK);
-    CHECK(g.type == SWX_TYPE_REPLY);
-
-    /* invite with wrong length must be rejected */
-    CHECK(swx_frame_decode(&g, wire, n - 1) == SWX_E_FORMAT);
-    CHECK(swx_frame_decode(&g, wire, n + 1) == SWX_E_FORMAT);
-
-    /* unknown type must be rejected */
-    wire2[4] = 0x77;
-    CHECK(swx_frame_decode(&g, wire2, n) == SWX_E_TYPE);
-
-    /* unknown suite must be rejected with UNSUPPORTED, never parsed */
-    CHECK(swx_frame_encode(wire2, sizeof wire2, &n, &f) == SWX_OK);
-    wire2[5] = 0x02;
-    CHECK(swx_frame_decode(&g, wire2, n) == SWX_E_UNSUPPORTED);
-
-    return failures ? 1 : 0;
-}
-
 static int test_data_roundtrip(void)
 {
     uint8_t nonce[SWX_NONCE_LEN], fp[SWX_FINGERPRINT_LEN];
@@ -128,6 +74,22 @@ static int test_data_roundtrip(void)
     /* tampered magic must be rejected */
     wire[0] = 'X';
     CHECK(swx_frame_decode(&g, wire, n) == SWX_E_FORMAT);
+    wire[0] = 'S';
+
+    /* retired pairing types (0x01/0x02) and unknown types must be rejected
+     * on the data channel — never parsed */
+    CHECK(swx_frame_encode(wire, sizeof wire, &n, &f) == SWX_OK);
+    wire[4] = 0x01;
+    CHECK(swx_frame_decode(&g, wire, n) == SWX_E_TYPE);
+    wire[4] = 0x02;
+    CHECK(swx_frame_decode(&g, wire, n) == SWX_E_TYPE);
+    wire[4] = 0x77;
+    CHECK(swx_frame_decode(&g, wire, n) == SWX_E_TYPE);
+
+    /* unknown suite must be rejected with UNSUPPORTED, never parsed */
+    CHECK(swx_frame_encode(wire, sizeof wire, &n, &f) == SWX_OK);
+    wire[5] = 0x02;
+    CHECK(swx_frame_decode(&g, wire, n) == SWX_E_UNSUPPORTED);
 
     return failures ? 1 : 0;
 }
@@ -199,7 +161,6 @@ static int test_b64(void)
 int main(void)
 {
     int r = 0;
-    r |= test_invite_roundtrip();
     r |= test_data_roundtrip();
     r |= test_aad();
     r |= test_b64();

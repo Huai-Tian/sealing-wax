@@ -39,7 +39,6 @@ import sealing.wax.ui.ChatScreen
 import sealing.wax.ui.HomeScreen
 import sealing.wax.ui.JoinSessionScreen
 import sealing.wax.ui.NewSessionScreen
-import sealing.wax.ui.SasScreen
 import sealing.wax.ui.theme.SealingWaxTheme
 
 /** 导航:无导航库,一个密封类 + 返回处理足够。 */
@@ -47,7 +46,6 @@ private sealed interface Dest {
     data object Home : Dest
     data object NewSession : Dest
     data object JoinSession : Dest
-    data object Sas : Dest
     data object Chat : Dest
 }
 
@@ -159,7 +157,14 @@ private fun App() {
             }
             NewSessionScreen(
                 onBack = { goHome() },
-                onPaired = { dest = Dest.Sas },
+                onPaired = {
+                    /* PAKE finished and the confirm verified: straight to chat;
+                     * SAS rides the top bar (§5: 无确认页) */
+                    SessionManager.beginConversation()
+                    chatTitle = "未命名会话"
+                    chatSaved = false
+                    dest = Dest.Chat
+                },
             )
         }
 
@@ -170,23 +175,12 @@ private fun App() {
             }
             JoinSessionScreen(
                 onBack = { goHome() },
-                onJoined = { dest = Dest.Sas },
-            )
-        }
-
-        Dest.Sas -> {
-            BackHandler {
-                SessionManager.abortPairing()
-                goHome()
-            }
-            SasScreen(
-                onConfirm = {
+                onJoined = {
                     SessionManager.beginConversation()
                     chatTitle = "未命名会话"
                     chatSaved = false
                     dest = Dest.Chat
                 },
-                onAbort = { goHome() },
             )
         }
 

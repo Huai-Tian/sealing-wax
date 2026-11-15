@@ -20,19 +20,25 @@ extern "C" {
 #endif
 
 /*
- * Session layer: X25519 + HKDF-SHA256 key agreement, per-message key
- * derivation (no ratchet), lifetime-monotonic counters with a receive
- * high-water mark, text piece reassembly, streaming file sealing, optional
- * length-confusion padding, and an export/import byte interface.
+ * Session layer: PAKE pairing (暗号-authenticated, headerless SPAKE2
+ * shares on the wire), per-message key derivation (no ratchet), lifetime-
+ * monotonic counters with a receive high-water mark, text piece reassembly,
+ * streaming file sealing, optional length-confusion padding, and an
+ * export/import byte interface.
  *
  * Zero I/O: persistence decisions live entirely in the platform layer.
  * Key material lives on the sodium guarded heap; free/wipe zeroes it.
+ * The vendored SPAKE2 context lives outside that heap, so wipe()/free()
+ * explicitly zero it before releasing (it holds the ephemeral scalar and
+ * the password scalar while a pairing is in flight).
  */
 typedef struct swx_session swx_session;
 
 /* ---- lifecycle ---- */
 
-/* Generates an X25519 keypair and a 16B salt. as_inviter: SWX_ROLE_* */
+/* Creates a session in the NEW state with a fresh SPAKE2 context bound to
+ * the role (inviter = alice blinding, responder = bob). as_inviter:
+ * SWX_ROLE_* */
 int swx_session_create(swx_session **out, int as_inviter);
 
 /* Wipes all key material in place and frees the guarded allocation. */
@@ -42,23 +48,34 @@ void swx_session_free(swx_session *s);
  * Every later call returns SWX_E_STATE. */
 void swx_session_wipe(swx_session *s);
 
-/* ---- pairing (wire bytes only) ---- */
+/* ---- pairing (wire bytes only; 暗号 never crosses the wire) ---- */
 
-/* Inviter side: emits the invite frame (type 0x01). NEW state only. */
-int swx_session_invite(const swx_session *s,
+/* Inviter side: emits the 32B invite share (type 0x01 retired — headerless).
+ * The 暗号 (secret) is hashed into the SPAKE2 blinding; it must match the
+ * responder's byte for byte. NEW state only. */
+int swx_session_invite(swx_session *s,
+                       const uint8_t *secret, size_t secret_len,
                        uint8_t *out, size_t out_cap, size_t *out_len);
 
-/* Responder side: consumes an invite frame, derives the session, emits the
- * reply frame (type 0x02). Consumes no key material afterwards. */
+/* Responder side: consumes the 32B invite share, derives the session and
+ * emits the 64B reply share (32B SPAKE2 share || 32B HKDF confirm).
+ * Pairing material is wiped and freed here; the session is ESTABLISHED
+ * on success. A wrong 暗号 is NOT detectable on this side until the
+ * inviter's first decryptable message (§4). */
 int swx_session_reply(swx_session *s,
+                      const uint8_t *secret, size_t secret_len,
                       const uint8_t *invite, size_t invite_len,
                       uint8_t *out, size_t out_cap, size_t *out_len);
 
-/* Inviter side: consumes the reply frame, derives the session. */
+/* Inviter side: consumes the 64B reply share and verifies the confirm
+ * value — a mismatched 暗号 yields SWX_E_CRYPTO here. ESTABLISHED on
+ * success; pairing material wiped and freed. */
 int swx_session_finish(swx_session *s,
                        const uint8_t *reply, size_t reply_len);
 
-/* 9 decimal digits + NUL (grouping 3-3-3 is a UI concern). */
+/* 9 decimal digits + NUL (grouping 3-3-3 is a UI concern). Only while the
+ * session is alive and was paired on this device; imported sessions carry
+ * no SAS (the platform layer persists it, §6). */
 int swx_session_sas(const swx_session *s, char out[SWX_SAS_DIGITS + 1]);
 
 /* Role under which the session was created / imported (SWX_ROLE_* or 0). */

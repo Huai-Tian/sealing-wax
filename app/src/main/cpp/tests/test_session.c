@@ -32,18 +32,32 @@ static int failures = 0;
 
 /* ---- helpers ---- */
 
-static int pair(swx_session **a, swx_session **b)
+static const uint8_t PAIR_SECRET[] = "火漆配对暗号";
+#define PAIR_SECRET_LEN (sizeof PAIR_SECRET - 1)
+
+/* full pairing with two explicit 暗号 (differ them for wrong-secret tests) */
+static int pair_as(swx_session **a, swx_session **b,
+                   const uint8_t *sec_a, size_t len_a,
+                   const uint8_t *sec_b, size_t len_b)
 {
-    uint8_t inv[SWX_INVITE_FRAME_LEN], rep[SWX_INVITE_FRAME_LEN];
+    uint8_t inv[SWX_PAIR_MSG_LEN], rep[SWX_PAIR_REPLY_LEN];
     size_t n = 0;
 
     CHECK(swx_session_create(a, SWX_ROLE_INVITER) == SWX_OK);
     CHECK(swx_session_create(b, SWX_ROLE_RESPONDER) == SWX_OK);
-    CHECK(swx_session_invite(*a, inv, sizeof inv, &n) == SWX_OK);
-    CHECK(n == SWX_INVITE_FRAME_LEN);
-    CHECK(swx_session_reply(*b, inv, n, rep, sizeof rep, &n) == SWX_OK);
+    CHECK(swx_session_invite(*a, sec_a, len_a, inv, sizeof inv, &n) == SWX_OK);
+    CHECK(n == SWX_PAIR_MSG_LEN);
+    CHECK(swx_session_reply(*b, sec_b, len_b, inv, n,
+                            rep, sizeof rep, &n) == SWX_OK);
+    CHECK(n == SWX_PAIR_REPLY_LEN);
     CHECK(swx_session_finish(*a, rep, n) == SWX_OK);
     return 0;
+}
+
+static int pair(swx_session **a, swx_session **b)
+{
+    return pair_as(a, b, PAIR_SECRET, PAIR_SECRET_LEN,
+                  PAIR_SECRET, PAIR_SECRET_LEN);
 }
 
 /* paste one base64 piece into a session */
@@ -78,7 +92,7 @@ static int test_pairing_sas(void)
 {
     swx_session *a = NULL, *b = NULL;
     char sa[SWX_SAS_DIGITS + 1], sb[SWX_SAS_DIGITS + 1];
-    uint8_t inv[SWX_INVITE_FRAME_LEN], rep[SWX_INVITE_FRAME_LEN];
+    uint8_t inv[SWX_PAIR_MSG_LEN], rep[SWX_PAIR_REPLY_LEN];
     size_t n = 0;
 
     CHECK(pair(&a, &b) == 0);
@@ -95,36 +109,137 @@ static int test_pairing_sas(void)
     CHECK(swx_session_role(b) == SWX_ROLE_RESPONDER);
 
     /* responder cannot emit an invite */
-    CHECK(swx_session_invite(b, inv, sizeof inv, &n) == SWX_E_STATE);
-    /* finished session cannot finish again */
-    CHECK(swx_session_invite(a, inv, sizeof inv, &n) == SWX_E_STATE);
+    CHECK(swx_session_invite(b, PAIR_SECRET, PAIR_SECRET_LEN,
+                             inv, sizeof inv, &n) == SWX_E_STATE);
+    /* finished session cannot pair again */
+    CHECK(swx_session_invite(a, PAIR_SECRET, PAIR_SECRET_LEN,
+                             inv, sizeof inv, &n) == SWX_E_STATE);
     CHECK(swx_session_finish(a, rep, 0) == SWX_E_STATE);
 
-    /* handshake type confusion is rejected */
+    /* pairing-shape confusion is rejected: lengths ARE the format */
     {
         swx_session *c = NULL, *d = NULL, *e = NULL, *f = NULL;
-        uint8_t wire[SWX_INVITE_FRAME_LEN];
         CHECK(pair(&c, &d) == 0);
         /* an established session can no longer emit invites */
-        CHECK(swx_session_invite(c, wire, sizeof wire, &n) == SWX_E_STATE);
+        CHECK(swx_session_invite(c, PAIR_SECRET, PAIR_SECRET_LEN,
+                                 inv, sizeof inv, &n) == SWX_E_STATE);
         swx_session_free(c);
         swx_session_free(d);
 
-        /* a fresh responder fed a REPLY-typed frame */
         CHECK(swx_session_create(&e, SWX_ROLE_RESPONDER) == SWX_OK);
         CHECK(swx_session_create(&f, SWX_ROLE_INVITER) == SWX_OK);
-        CHECK(swx_session_invite(f, wire, sizeof wire, &n) == SWX_OK);
-        wire[4] = SWX_TYPE_REPLY;
-        CHECK(swx_session_reply(e, wire, n, rep, sizeof rep, &n)
-              == SWX_E_TYPE);
-        /* self-paste: f finishing with its own (reply-typed) invite */
-        CHECK(swx_session_finish(f, wire, n) == SWX_E_STATE);
+        CHECK(swx_session_invite(f, PAIR_SECRET, PAIR_SECRET_LEN,
+                                 inv, sizeof inv, &n) == SWX_OK);
+        /* self-paste: A finishing with its own 32B invite (64B expected) */
+        CHECK(swx_session_finish(f, inv, n) == SWX_E_FORMAT);
+        /* truncated / padded shares are rejected */
+        CHECK(swx_session_reply(e, PAIR_SECRET, PAIR_SECRET_LEN,
+                                inv, n - 1, rep, sizeof rep, &n)
+              == SWX_E_FORMAT);
+        CHECK(swx_session_reply(e, PAIR_SECRET, PAIR_SECRET_LEN,
+                                inv, n + 1, rep, sizeof rep, &n)
+              == SWX_E_FORMAT);
+        /* role confusion: a fresh inviter cannot take the responder path */
+        CHECK(swx_session_reply(f, PAIR_SECRET, PAIR_SECRET_LEN,
+                                inv, n, rep, sizeof rep, &n)
+              == SWX_E_STATE);
+        /* a fresh responder cannot run finish */
+        CHECK(swx_session_finish(e, rep, 0) == SWX_E_STATE);
+        /* empty / oversized 暗号 rejected */
+        CHECK(swx_session_invite(f, PAIR_SECRET, 0,
+                                 inv, sizeof inv, &n) == SWX_E_ARG);
+        CHECK(swx_session_invite(f, PAIR_SECRET, SWX_PAIR_SECRET_MAX + 1,
+                                 inv, sizeof inv, &n) == SWX_E_ARG);
         swx_session_free(e);
         swx_session_free(f);
     }
 
     swx_session_free(a);
     swx_session_free(b);
+    return failures ? 1 : 0;
+}
+
+/* ---- pairing: wrong 暗号 + corruption never produce a live session ---- */
+
+static int test_pairing_wrong_secret(void)
+{
+    static const uint8_t WRONG[] = "完全不同的暗号";
+    swx_session *a = NULL, *b1 = NULL, *b2 = NULL;
+    uint8_t inv[SWX_PAIR_MSG_LEN], rep[SWX_PAIR_REPLY_LEN];
+    uint8_t blob1[64], blob2[64];
+    size_t n = 0, rn = 0, blen = 0;
+
+    /* one invite, two responders with different 暗号: both reply locally,
+     * but only the matching 暗号 yields the session A will accept — and
+     * the two responders' session keys must differ (暗号 binds the key) */
+    CHECK(swx_session_create(&a, SWX_ROLE_INVITER) == SWX_OK);
+    CHECK(swx_session_invite(a, PAIR_SECRET, PAIR_SECRET_LEN,
+                             inv, sizeof inv, &n) == SWX_OK);
+
+    CHECK(swx_session_create(&b1, SWX_ROLE_RESPONDER) == SWX_OK);
+    CHECK(swx_session_reply(b1, PAIR_SECRET, PAIR_SECRET_LEN, inv, n,
+                            rep, sizeof rep, &rn) == SWX_OK);
+    CHECK(swx_session_export(b1, blob1, sizeof blob1, &blen) == SWX_OK);
+    CHECK(swx_session_finish(a, rep, rn) == SWX_OK);        /* correct path */
+    CHECK(swx_session_sas(a, (char[10]){ 0 }) == SWX_OK);
+
+    /* a SECOND pair: fresh invite bytes consumed with the WRONG 暗号 —
+     * the reply is produced locally (undetectable on B by design, §4)
+     * but A2 must reject it at finish() */
+    {
+        swx_session *a2 = NULL;
+        CHECK(swx_session_create(&a2, SWX_ROLE_INVITER) == SWX_OK);
+        CHECK(swx_session_create(&b2, SWX_ROLE_RESPONDER) == SWX_OK);
+        CHECK(swx_session_invite(a2, PAIR_SECRET, PAIR_SECRET_LEN,
+                                 inv, sizeof inv, &n) == SWX_OK);
+        CHECK(swx_session_reply(b2, WRONG, sizeof WRONG - 1, inv, n,
+                                rep, sizeof rep, &rn) == SWX_OK);
+        CHECK(swx_session_export(b2, blob2, sizeof blob2, &blen) == SWX_OK);
+        CHECK(swx_session_finish(a2, rep, rn) == SWX_E_CRYPTO);
+        CHECK(swx_session_sas(a2, (char[10]){ 0 }) == SWX_E_STATE);
+        swx_session_free(a2);
+    }
+
+    /* the two responder key schedules must differ (blob layout: key at 12) */
+    CHECK(memcmp(blob1 + 12, blob2 + 12, 32) != 0);
+    sodium_memzero(blob1, sizeof blob1);
+    sodium_memzero(blob2, sizeof blob2);
+    swx_session_free(a);
+    swx_session_free(b1);
+    swx_session_free(b2);
+
+    /* every corrupted bit of the pairing bytes kills the pairing: the
+     * reply rejects the share or A's finish rejects the confirm — a
+     * corrupted exchange can never complete with live keys */
+    for (int bit = 0; bit < 8 * SWX_PAIR_MSG_LEN; bit++) {
+        swx_session *x = NULL, *y = NULL;
+        CHECK(swx_session_create(&x, SWX_ROLE_INVITER) == SWX_OK);
+        CHECK(swx_session_create(&y, SWX_ROLE_RESPONDER) == SWX_OK);
+        CHECK(swx_session_invite(x, PAIR_SECRET, PAIR_SECRET_LEN,
+                                 inv, sizeof inv, &n) == SWX_OK);
+        inv[bit / 8] ^= (uint8_t) (1 << (bit & 7));
+        int rb = swx_session_reply(y, PAIR_SECRET, PAIR_SECRET_LEN,
+                                   inv, n, rep, sizeof rep, &rn);
+        int fa = (rb == SWX_OK) ? swx_session_finish(x, rep, rn)
+                                : SWX_E_CRYPTO;
+        CHECK(!(rb == SWX_OK && fa == SWX_OK));
+        swx_session_free(x);
+        swx_session_free(y);
+    }
+    for (int bit = 0; bit < 8 * SWX_PAIR_REPLY_LEN; bit++) {
+        swx_session *x = NULL, *y = NULL;
+        CHECK(swx_session_create(&x, SWX_ROLE_INVITER) == SWX_OK);
+        CHECK(swx_session_create(&y, SWX_ROLE_RESPONDER) == SWX_OK);
+        CHECK(swx_session_invite(x, PAIR_SECRET, PAIR_SECRET_LEN,
+                                 inv, sizeof inv, &n) == SWX_OK);
+        CHECK(swx_session_reply(y, PAIR_SECRET, PAIR_SECRET_LEN,
+                                inv, n, rep, sizeof rep, &rn) == SWX_OK);
+        rep[bit / 8] ^= (uint8_t) (1 << (bit & 7));
+        CHECK(swx_session_finish(x, rep, rn) == SWX_E_CRYPTO);
+        swx_session_free(x);
+        swx_session_free(y);
+    }
+
     return failures ? 1 : 0;
 }
 
@@ -1077,9 +1192,7 @@ static int test_memory_discipline(void)
         for (size_t i = 0; i < 32; i++) {
             CHECK(a->session_key[i] == 0);
         }
-        for (size_t i = 0; i < 32; i++) {
-            CHECK(a->sk[i] == 0);
-        }
+        CHECK(a->spake == NULL);    /* pairing ctx burned, never dangling */
         CHECK(a->state == SWX_ST_DEAD);
         CHECK(swx_session_sas(a, (char[10]){ 0 }) == SWX_E_STATE);
         CHECK(swx_session_seal_text(a, (const uint8_t *) "x", 1, NULL,
@@ -1088,6 +1201,21 @@ static int test_memory_discipline(void)
         CHECK(before[0] != 0 || before[1] != 0 || before[2] != 0);
     }
     swx_session_free(a);    /* free after wipe must be safe */
+
+    /* white-box: an in-flight pairing carries a live ctx; wipe burns it */
+    {
+        swx_session *p = NULL;
+        uint8_t inv[SWX_PAIR_MSG_LEN];
+        size_t n = 0;
+        CHECK(swx_session_create(&p, SWX_ROLE_INVITER) == SWX_OK);
+        CHECK(p->spake != NULL);
+        CHECK(swx_session_invite(p, PAIR_SECRET, PAIR_SECRET_LEN,
+                                 inv, sizeof inv, &n) == SWX_OK);
+        swx_session_wipe(p);
+        CHECK(p->spake == NULL);
+        CHECK(p->state == SWX_ST_DEAD);
+        swx_session_free(p);
+    }
 
     /* message keys separate by direction and counter */
     {
@@ -1142,6 +1270,7 @@ int main(void)
 {
     int r = 0;
     r |= test_pairing_sas();
+    r |= test_pairing_wrong_secret();
     r |= test_text_roundtrip();
     r |= test_text_multipiece();
     r |= test_replay_tamper();

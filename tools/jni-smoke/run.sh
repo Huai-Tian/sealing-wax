@@ -32,7 +32,8 @@ cmake --build "$WORK/build" -j"$(nproc)" >/dev/null
 
 echo "== building libwaxhost.so =="
 g++ -shared -fPIC -O2 -std=c++17 \
-    -I "$ROOT/app/src/main/cpp/core" -I "$WORK/build/libsodium" \
+    -I "$ROOT/app/src/main/cpp/core" -I "$ROOT/app/src/main/cpp/spake2" \
+    -I "$WORK/build/libsodium" \
     -I "$ROOT/app/src/main/cpp/libsodium/src/libsodium/include" \
     -I "$ROOT/app/src/main/cpp/libsodium/src/libsodium/include/sodium" \
     -I "$JDK/include" -I "$JDK/include/linux" \
@@ -40,6 +41,8 @@ g++ -shared -fPIC -O2 -std=c++17 \
     "$ROOT/app/src/main/cpp/core/swx_frame.c" \
     "$ROOT/app/src/main/cpp/core/swx_session.c" \
     "$ROOT/app/src/main/cpp/core/swx_hash.c" \
+    "$ROOT/app/src/main/cpp/spake2/spake2.c" \
+    "$ROOT/app/src/main/cpp/spake2/sha512.c" \
     "$WORK/build/libsodium/libsodium.a" \
     -o "$WORK/libwaxhost.so" -lm
 

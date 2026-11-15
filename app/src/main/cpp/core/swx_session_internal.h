@@ -38,10 +38,9 @@ struct swx_session {
     uint8_t  suite;        /* SWX_SUITE_* */
     uint8_t  pad_on;
     uint16_t pad_threshold;                /* base64 chars per piece */
-    uint8_t  sk[SWX_PUBKEY_LEN];           /* dead after pairing */
-    uint8_t  pk[SWX_PUBKEY_LEN];
-    uint8_t  salt_own[SWX_SALT_LEN];       /* dead after pairing */
-    uint8_t  salt_peer[SWX_SALT_LEN];
+    void    *spake;                         /* vendored SPAKE2 ctx; alive only
+                                             * during pairing (NEW state), wiped
+                                             * and freed at establishment */
     uint8_t  session_key[32];
     char     sas[SWX_SAS_DIGITS + 1];
     uint64_t send_next;

@@ -59,47 +59,30 @@ int swx_frame_encode(uint8_t *out, size_t out_cap, size_t *out_len,
         return SWX_E_FORMAT;
     }
 
-    if (f->type == SWX_TYPE_INVITE || f->type == SWX_TYPE_REPLY) {
-        if (f->pubkey == NULL || f->salt == NULL) {
-            return SWX_E_ARG;
-        }
-        if (out_cap < SWX_INVITE_FRAME_LEN) {
-            return SWX_E_LEN;
-        }
-        memcpy(out, SWX_MAGIC, SWX_MAGIC_LEN);
-        out[4] = f->type;
-        out[5] = f->suite;
-        memcpy(out + SWX_HEADER_LEN, f->pubkey, SWX_PUBKEY_LEN);
-        memcpy(out + SWX_HEADER_LEN + SWX_PUBKEY_LEN, f->salt, SWX_SALT_LEN);
-        *out_len = SWX_INVITE_FRAME_LEN;
-        return SWX_OK;
+    if (f->type != SWX_TYPE_TEXT && f->type != SWX_TYPE_FILE) {
+        return SWX_E_TYPE;
     }
-
-    if (f->type == SWX_TYPE_TEXT || f->type == SWX_TYPE_FILE) {
-        if (f->nonce == NULL || f->fingerprint == NULL ||
-            (f->ct == NULL && f->ct_len > 0)) {
-            return SWX_E_ARG;
-        }
-        size_t need = swx_frame_size(f->ct_len);
-        if (out_cap < need) {
-            return SWX_E_LEN;
-        }
-        memcpy(out, SWX_MAGIC, SWX_MAGIC_LEN);
-        out[4] = f->type;
-        out[5] = f->suite;
-        swx_store64be(out + SWX_HEADER_LEN, f->counter);
-        memcpy(out + SWX_HEADER_LEN + SWX_COUNTER_LEN, f->nonce, SWX_NONCE_LEN);
-        memcpy(out + 26, f->fingerprint, SWX_FINGERPRINT_LEN);
-        swx_store32be(out + 42, f->chunk_index);
-        swx_store32be(out + 46, f->total_chunks);
-        if (f->ct_len > 0) {
-            memcpy(out + SWX_DATA_FIXED_LEN, f->ct, f->ct_len);
-        }
-        *out_len = need;
-        return SWX_OK;
+    if (f->nonce == NULL || f->fingerprint == NULL ||
+        (f->ct == NULL && f->ct_len > 0)) {
+        return SWX_E_ARG;
     }
-
-    return SWX_E_TYPE;
+    size_t need = swx_frame_size(f->ct_len);
+    if (out_cap < need) {
+        return SWX_E_LEN;
+    }
+    memcpy(out, SWX_MAGIC, SWX_MAGIC_LEN);
+    out[4] = f->type;
+    out[5] = f->suite;
+    swx_store64be(out + SWX_HEADER_LEN, f->counter);
+    memcpy(out + SWX_HEADER_LEN + SWX_COUNTER_LEN, f->nonce, SWX_NONCE_LEN);
+    memcpy(out + 26, f->fingerprint, SWX_FINGERPRINT_LEN);
+    swx_store32be(out + 42, f->chunk_index);
+    swx_store32be(out + 46, f->total_chunks);
+    if (f->ct_len > 0) {
+        memcpy(out + SWX_DATA_FIXED_LEN, f->ct, f->ct_len);
+    }
+    *out_len = need;
+    return SWX_OK;
 }
 
 int swx_frame_decode(swx_frame *out, const uint8_t *in, size_t in_len)
@@ -122,30 +105,20 @@ int swx_frame_decode(swx_frame *out, const uint8_t *in, size_t in_len)
         return SWX_E_UNSUPPORTED;
     }
 
-    if (out->type == SWX_TYPE_INVITE || out->type == SWX_TYPE_REPLY) {
-        if (in_len != SWX_INVITE_FRAME_LEN) {
-            return SWX_E_FORMAT;
-        }
-        out->pubkey = in + SWX_HEADER_LEN;
-        out->salt = out->pubkey + SWX_PUBKEY_LEN;
-        return SWX_OK;
+    if (out->type != SWX_TYPE_TEXT && out->type != SWX_TYPE_FILE) {
+        return SWX_E_TYPE;
     }
-
-    if (out->type == SWX_TYPE_TEXT || out->type == SWX_TYPE_FILE) {
-        if (in_len < SWX_DATA_FIXED_LEN + SWX_TAG_LEN) {
-            return SWX_E_FORMAT;
-        }
-        out->counter = swx_load64be(in + SWX_HEADER_LEN);
-        out->nonce = in + SWX_HEADER_LEN + SWX_COUNTER_LEN;
-        out->fingerprint = in + 26;
-        out->chunk_index = swx_load32be(in + 42);
-        out->total_chunks = swx_load32be(in + 46);
-        out->ct = in + SWX_DATA_FIXED_LEN;
-        out->ct_len = in_len - SWX_DATA_FIXED_LEN;
-        return SWX_OK;
+    if (in_len < SWX_DATA_FIXED_LEN + SWX_TAG_LEN) {
+        return SWX_E_FORMAT;
     }
-
-    return SWX_E_TYPE;
+    out->counter = swx_load64be(in + SWX_HEADER_LEN);
+    out->nonce = in + SWX_HEADER_LEN + SWX_COUNTER_LEN;
+    out->fingerprint = in + 26;
+    out->chunk_index = swx_load32be(in + 42);
+    out->total_chunks = swx_load32be(in + 46);
+    out->ct = in + SWX_DATA_FIXED_LEN;
+    out->ct_len = in_len - SWX_DATA_FIXED_LEN;
+    return SWX_OK;
 }
 
 int swx_frame_apply_mask(uint8_t *buf, size_t len, const uint8_t ks[SWX_MASK_LEN])

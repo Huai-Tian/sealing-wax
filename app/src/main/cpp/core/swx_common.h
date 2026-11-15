@@ -37,23 +37,26 @@ extern "C" {
 #define SWX_MAGIC_LEN        4
 #define SWX_HEADER_LEN       6     /* magic(4) + type(1) + suite(1) */
 
-#define SWX_TYPE_INVITE      0x01
-#define SWX_TYPE_REPLY       0x02
 #define SWX_TYPE_TEXT        0x03
 #define SWX_TYPE_FILE        0x04
+/* 0x01/0x02 (invite/reply) retired with the bare X25519 handshake: pairing
+ * frames are headerless SPAKE2 messages (README_AGENT.md §4, 2026-11 PAKE
+ * 化) and carry no type byte. The values stay reserved, never reused. */
 
 #define SWX_SUITE_CHACHA     0x01  /* v1: only suite (X25519+HKDF+ChaCha20-Poly1305) */
 
-#define SWX_PUBKEY_LEN       32    /* X25519 */
-#define SWX_SALT_LEN         16    /* HKDF extract salt contribution per side */
 #define SWX_NONCE_LEN        12    /* pure random per message (CSPRNG) */
 #define SWX_FINGERPRINT_LEN  16    /* logical-message id (groups chunks) */
 #define SWX_COUNTER_LEN      8     /* per-direction lifetime monotonic */
 #define SWX_CHUNK_LEN        4     /* chunk index / total chunks */
 #define SWX_TAG_LEN          16    /* Poly1305 tag */
 
-/* invite/reply frame = header + pubkey + salt */
-#define SWX_INVITE_FRAME_LEN (SWX_HEADER_LEN + SWX_PUBKEY_LEN + SWX_SALT_LEN) /* 54 */
+/* pairing frames: headerless SPAKE2 shares — nothing recognizable on the
+ * wire. invite = A's 32B share; reply = B's 32B share || 32B HKDF confirm */
+#define SWX_PAIR_MSG_LEN     32
+#define SWX_PAIR_CONFIRM_LEN 32
+#define SWX_PAIR_REPLY_LEN   (SWX_PAIR_MSG_LEN + SWX_PAIR_CONFIRM_LEN)        /* 64 */
+#define SWX_PAIR_SECRET_MAX  256   /* 暗号 byte cap (pathological-input guard) */
 
 /* data frame = header + counter + nonce + fingerprint + idx + total + ct||tag */
 #define SWX_DATA_FIXED_LEN   (SWX_HEADER_LEN + SWX_COUNTER_LEN + SWX_NONCE_LEN + \

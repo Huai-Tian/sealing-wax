@@ -76,11 +76,14 @@ data class LedgerEntry(
     }
 }
 
-/** Everything a saved session keeps, minus counters (16B plaintext file). */
+/** Everything a saved session keeps, minus counters (16B plaintext file).
+ *  sas: the 9-digit identity fingerprint from the pairing — non-secret,
+ *  shown in the chat top bar for lifelong re-verification (§6/§9). */
 data class SavedSession(
     val id: String,
     var name: String,
     val role: Int,
+    val sas: String,
     var padOn: Boolean,
     var padThreshold: Int,
     val createdMs: Long,
@@ -93,6 +96,7 @@ data class SavedSession(
         put("v", 1)
         put("name", name)
         put("role", role)
+        put("sas", sas)
         put("padOn", padOn)
         put("padThresh", padThreshold)
         put("created", createdMs)
@@ -107,6 +111,7 @@ data class SavedSession(
             id = id,
             name = o.getString("name"),
             role = o.getInt("role"),
+            sas = o.optString("sas", ""),
             padOn = o.optBoolean("padOn", false),
             padThreshold = o.optInt("padThresh", 1000),
             createdMs = o.getLong("created"),

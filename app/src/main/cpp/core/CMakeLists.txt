@@ -4,4 +4,4 @@ add_library(swx_core STATIC
     swx_session.c
     swx_hash.c)
 target_include_directories(swx_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
-target_link_libraries(swx_core PUBLIC sodium)
+target_link_libraries(swx_core PUBLIC sodium spake2)

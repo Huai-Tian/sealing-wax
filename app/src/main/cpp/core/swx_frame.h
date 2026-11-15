@@ -20,14 +20,12 @@ extern "C" {
 
 /*
  * Non-owning frame view. Pointers reference caller-owned memory and remain
- * valid only as long as that memory does.
+ * valid only as long as that memory does. Pairing frames are NOT handled
+ * here: they are headerless SPAKE2 shares (swx_session.c, §4 PAKE 化).
  */
 typedef struct {
     uint8_t  type;                 /* SWX_TYPE_* */
     uint8_t  suite;                /* SWX_SUITE_* */
-    /* invite / reply */
-    const uint8_t *pubkey;         /* SWX_PUBKEY_LEN */
-    const uint8_t *salt;           /* SWX_SALT_LEN */
     /* data */
     uint64_t counter;              /* per-direction lifetime monotonic */
     const uint8_t *nonce;          /* SWX_NONCE_LEN */

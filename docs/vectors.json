@@ -1,34 +1,36 @@
 {
   "spec": "SWX1",
+  "wire_spec": 2,
   "suite": 1,
-  "note": "fixed inputs; cross-checked against the production core",
+  "pairing": "spake2 (BoringSSL spake25519 port, vendored)",
+  "note": "pairing entropy pinned via the PRNG log; data frames cross-checked against the production core",
   "fixed_inputs": {
-    "a_sk": "770102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e3f",
-    "b_sk": "882122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e1f",
-    "a_salt": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf",
-    "b_salt": "b0b1b2b3b4b5b6b7b8b9babbbcbdbebf",
+    "password": "火漆配对暗号",
+    "prng_init_hex": "78d5b90b15f9aa02a75c85de7d426d32",
+    "spake_entropy_a_hex": "ffbc904527e0c5861cc31dba5974472fee6991d59f066cf3b587f62fe935e7e0723eacbcaa90c5e634a117815a5c55f8c9dc47b50bedd76693b0ef125f2c1b0f",
+    "spake_entropy_b_hex": "c620518e95a7ffcd1e01dc59a270fb510c2c6fc66dc2483e32367c29b018e887e2c1f009cb1044314484908229692897eaeaac3a4f7a31780565964cf9c4bf8f",
     "nonce": "0c000102030405060708090a",
     "fingerprint": "f0f1f2f3f4f5f6f7f8f9fafbfcfdfeff",
     "counter": 1,
     "plaintext": "火漆 wire-spec vector",
     "plaintext_hex": "e781abe6bc8620776972652d7370656320766563746f72"
   },
-  "invite_frame_b64": "U1dYMQEBrGxdVTHMlB8xvcrWqpfEx1SnZWNfvxMFVwTr8L4Y3gCgoaKjpKWmp6ipqqusra6v",
-  "reply_frame_b64": "U1dYMQIBnetD59VPER6dQiarj6/CglC/DAbXY8BNO99B0bIA/nCwsbKztLW2t7i5uru8vb6/",
-  "sas": "533185916",
-  "session_key_hex": "eb68955628ce82968c802c3fda1f6cfdff3d644b7496afef61a4c55a6197dc3c",
+  "invite_share_b64": "ggiaHmIW/aXp90U9qGi3mdW49zF+hMaRlfxuVR4xZVw=",
+  "reply_share_b64": "2GUg5sOaNT3LebU79V5gnDLkJT5+7z2gDvJ+CAgXlQl4sSB2OuzFrfyR2PHEWSXNLwMZRoJ9IyGIGSGEPhulBA==",
+  "sas": "046341610",
+  "session_key_hex": "c41bd4da9ed935a9cbe43139c9ffd0937a1621eb49cddc2a429299503a9735da",
   "aad_hex": "5357583103010000000000000001f0f1f2f3f4f5f6f7f8f9fafbfcfdfeff0000000000000001",
-  "mask_keystream_hex": "e913d7d6f3146bd31bc4592cf0ff66585ed17aba87426fd5ed84126c05685a764ca07eda67f9",
+  "mask_keystream_hex": "b54dc83d8a883bdcfa40c0518abbef5f2cfa6ff53389905fb410cd6cc7425eae09661054a767",
   "a2b": {
-    "msg_key_hex": "b433f963bc1857535c53bdb68fb323744f1d1b62b7b0fced52b817d353780f77",
-    "frame_hex": "ba448fe7f0156bd31bc4592cf0fe0c000102030405060708090a96a9ac228e4f71b5972c177fee91fb975a764ca07eda67f843f5152439b5ac8688687c54888de7ba85d9aec640855a4d1a21c81dcd618152e6c0afc3adf4db",
-    "frame_b64": "ukSP5/AVa9MbxFks8P4MAAECAwQFBgcICQqWqawijk9xtZcsF3/ukfuXWnZMoH7aZ/hD9RUkObWshohofFSIjee6hdmuxkCFWk0aIcgdzWGBUubAr8Ot9Ns="
+    "msg_key_hex": "6f08703999033b81cb444e3303daf85d8159de10e4bb812ea66dce3385ab5b98",
+    "frame_hex": "e61a900c89893bdcfa40c0518aba0c000102030405060708090a1faede099b00c57e68a64eeb319139bd5eae09661054a766c976fa88d01e01e5bff262d2144d49ed025cdc868e10f2d0ab7cdf42d4c264846af57232c65175",
+    "frame_b64": "5hqQDImJO9z6QMBRiroMAAECAwQFBgcICQofrt4JmwDFfmimTusxkTm9Xq4JZhBUp2bJdvqI0B4B5b/yYtIUTUntAlzcho4Q8tCrfN9C1MJkhGr1cjLGUXU="
   },
   "b2a": {
-    "msg_key_hex": "105d985f7176274b1fc187ab7c79f3f7ea830034db15d6e90aa264bd03abd6ea",
-    "frame_hex": "ba448fe7f0156bd31bc4592cf0fe0c000102030405060708090a96a9ac228e4f71b5972c177fee91fb975a764ca07eda67f8cc316a547cdda284356852585f48045ff5a87efe461d4debcb4a7186829549f381e260816dbd3c",
-    "frame_b64": "ukSP5/AVa9MbxFks8P4MAAECAwQFBgcICQqWqawijk9xtZcsF3/ukfuXWnZMoH7aZ/jMMWpUfN2ihDVoUlhfSARf9ah+/kYdTevLSnGGgpVJ84HiYIFtvTw="
+    "msg_key_hex": "782bc36394b5a8011642d905bd31b521301e17baa6a9f762908bd2a247c234ed",
+    "frame_hex": "e61a900c89893bdcfa40c0518aba0c000102030405060708090a1faede099b00c57e68a64eeb319139bd5eae09661054a7664e8dffccb4a959f029726d9b416581ce909489d9dd8a6c9773f7c7b1e709f0b1269148f678ecf8",
+    "frame_b64": "5hqQDImJO9z6QMBRiroMAAECAwQFBgcICQofrt4JmwDFfmimTusxkTm9Xq4JZhBUp2ZOjf/MtKlZ8ClybZtBZYHOkJSJ2d2KbJdz98ex5wnwsSaRSPZ47Pg="
   },
-  "state_blob_responder_hex": "535758530102010003e80000eb68955628ce82968c802c3fda1f6cfdff3d644b7496afef61a4c55a6197dc3cda17076df88df9ccdc2de5449cdc89c4",
-  "state_blob_inviter_hex": "535758530101010003e80000eb68955628ce82968c802c3fda1f6cfdff3d644b7496afef61a4c55a6197dc3c1a569b830b6ce8571c2b447272ccda87"
+  "state_blob_responder_hex": "535758530102010003e80000c41bd4da9ed935a9cbe43139c9ffd0937a1621eb49cddc2a429299503a9735dab65ff6346ac931dbfe7a97f5998e26c2",
+  "state_blob_inviter_hex": "535758530101010003e80000c41bd4da9ed935a9cbe43139c9ffd0937a1621eb49cddc2a429299503a9735dafb1e87687a02b9991cd47c289c2f5773"
 }
