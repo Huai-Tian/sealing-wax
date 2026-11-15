@@ -197,6 +197,9 @@ private val OverflowMenuMinWidth = 196.dp
 private val OverflowMenuItemHeight = 48.dp
 private val OverflowMenuItemPadding = 16.dp
 
+/** 自定义行(带尾随控件)复用菜单几何用:菜单行最小宽。 */
+internal val OverflowMenuRowMinWidth = OverflowMenuMinWidth
+
 /**
  * Shizuku 溢出菜单同款比例的下拉菜单。放进包住锚点按钮的 Box 里使用
  * (锚点 = 父布局,与 DropdownMenu 相同);条目用 [OverflowMenuItem]。

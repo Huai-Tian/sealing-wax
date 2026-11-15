@@ -21,6 +21,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -71,6 +72,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -98,6 +100,11 @@ import java.util.Date
  *  28 / 69 / 144 / 280 / 528 / 978 字。无默认档——开启必从列表选档,
  *  关闭时分割 = 单片上限(非混淆,不受本表影响)。须为 4 的倍数。 */
 private val PAD_THRESHOLDS = intArrayOf(200, 364, 664, 1208, 2200, 4000)
+
+/** 菜单当前值强调色:固定蓝(所有者指示),深浅主题各取一档保证对比度。 */
+@Composable
+private fun menuValueColor(): Color =
+    if (isSystemInDarkTheme()) Color(0xFF90CAF9) else Color(0xFF1976D2)
 
 /** 对话屏:五个动作全部一键化(§5),KPI = 平文 + 1 步。 */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -343,9 +350,13 @@ fun ChatScreen(
                             },
                         ) {
                             Box {
+                                /* 行必须带菜单最小宽:外层菜单仅此一行,宽度跟随
+                                 * 行内蕴宽度,不带最小宽会把标签和当前值挤到
+                                 * 一起(真机反馈,第六批收尾) */
                                 Row(
                                     Modifier
                                         .fillMaxWidth()
+                                        .widthIn(min = OverflowMenuRowMinWidth)
                                         .heightIn(min = 48.dp)
                                         .clickable { padOpen = !padOpen }
                                         .padding(horizontal = 16.dp),
@@ -356,14 +367,16 @@ fun ChatScreen(
                                         style = MaterialTheme.typography.bodyLarge,
                                         modifier = Modifier.weight(1f),
                                     )
+                                    /* 当前值:12sp 蓝色小字,与标签拉开层次
+                                     * (所有者指示,第六批收尾) */
                                     Text(
                                         if (SessionManager.paddingEnabled) {
                                             SessionManager.paddingThreshold.toString()
                                         } else {
                                             stringResource(R.string.padding_off)
                                         },
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = menuValueColor(),
                                     )
                                     Icon(
                                         Icons.Default.ArrowDropDown,
@@ -371,8 +384,9 @@ fun ChatScreen(
                                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                 }
-                                /* 嵌套下拉:关闭 + 阈值档位(第六批重定,覆盖核心
-                                 * 全区间;列表外的旧值仅不再展示,仍合法) */
+                                /* 嵌套下拉:关闭 + 阈值档位(等比 ×1.82);选档后
+                                 * 仅关闭本层——外层菜单留着,让用户看到新当前值
+                                 * (真机反馈,第六批收尾) */
                                 OverflowMenu(
                                     expanded = padOpen,
                                     onDismissRequest = { padOpen = false },
@@ -380,13 +394,11 @@ fun ChatScreen(
                                     OverflowMenuItem(stringResource(R.string.padding_off)) {
                                         SessionManager.setPadding(false, SessionManager.paddingThreshold)
                                         padOpen = false
-                                        menuOpen = false
                                     }
                                     PAD_THRESHOLDS.forEach { t ->
                                         OverflowMenuItem(t.toString()) {
                                             SessionManager.setPadding(true, t)
                                             padOpen = false
-                                            menuOpen = false
                                         }
                                     }
                                 }

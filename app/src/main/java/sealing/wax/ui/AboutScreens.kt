@@ -93,7 +93,9 @@ fun AboutDialog(onDismiss: () -> Unit) {
             color = AlertDialogDefaults.containerColor,
         ) {
             Row(
-                verticalAlignment = Alignment.CenterVertically,
+                /* 图标顶部对齐名称/版本块(同 Shizuku 的 LinearLayout 默认顶对齐,
+                 * 真机反馈:不要居中) */
+                verticalAlignment = Alignment.Top,
                 modifier = Modifier.padding(24.dp),
             ) {
                 Image(icon, contentDescription = null, modifier = Modifier.size(40.dp))
