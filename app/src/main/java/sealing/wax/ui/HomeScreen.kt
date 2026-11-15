@@ -38,8 +38,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -128,7 +126,7 @@ fun HomeScreen(
                             .weight(1f)
                             .padding(start = 16.dp, top = 24.dp, bottom = 12.dp),
                     )
-                    /* Box 包住 IconButton + DropdownMenu:菜单锚定按钮本身;
+                    /* Box 包住 IconButton + 溢出菜单:菜单锚定按钮本身;
                      * 曾直接放 Row 里锚到整行,真机上左展开(真机反馈 2026-11) */
                     Box {
                         var menuOpen by remember { mutableStateOf(false) }
@@ -141,16 +139,25 @@ fun HomeScreen(
                                 contentDescription = stringResource(R.string.chat_menu_cd),
                             )
                         }
-                        /* Shizuku 同款下拉:开放源代码在上,关于在下(§9) */
-                        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.menu_open_source)) },
-                                onClick = { menuOpen = false; onOpenSource() },
-                            )
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.menu_about)) },
-                                onClick = { menuOpen = false; aboutOpen = true },
-                            )
+                        /* Shizuku 同款下拉:开放源代码在上,关于在下(§9);
+                         * 长宽比 = appcompat 溢出菜单几何(196dp 最小宽 ×
+                         * 48dp 行高,无竖向内边距),M3 DropdownMenu 偏方 */
+                        OverflowMenu(
+                            expanded = menuOpen,
+                            onDismissRequest = { menuOpen = false },
+                        ) {
+                            OverflowMenuItem(
+                                stringResource(R.string.menu_open_source),
+                            ) {
+                                menuOpen = false
+                                onOpenSource()
+                            }
+                            OverflowMenuItem(
+                                stringResource(R.string.menu_about),
+                            ) {
+                                menuOpen = false
+                                aboutOpen = true
+                            }
                         }
                     }
                 }

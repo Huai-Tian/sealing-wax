@@ -297,14 +297,15 @@ B 侧说明:  B 在生成回复码时即已建立会话(两帧下限,B 无配对
   "火漆",默认 "Sealing Wax",代码零语言判断),无"已保存的会话"块标题;
   有会话 = 卡片列表直接开始,无会话 = 原小字文案居中(加载/失败文案同样
   居中于应用名下方)。右上角竖三点菜单(Shizuku 同款,Box 包裹 IconButton
-  + DropdownMenu 锚定按钮——真机反馈:曾锚到整行致菜单左展开):开放源代码
+  + 菜单锚定按钮——真机反馈:曾锚到整行致菜单左展开;菜单几何复刻
+  appcompat 溢出菜单,长宽比同 Shizuku,见 §15 第五批):开放源代码
   在上,关于在下
-- 关于 = Shizuku 式**小弹窗**(非独立页):图标/应用名/定位三句话(§1
-  "端到端、两端平等、默认零状态")/版本(PackageManager 取 versionName)/
-  GitHub 仓库行(浏览器打开)/许可证行;点空白关闭(无按钮,SAS 弹窗同款)。
-  开放源代码页(独立页):AGPL-3.0-or-later 说明
-  + 组件许可证清单(core 自研 / libsodium ISC / spake2 按文件 / Compose、
-  Tink、ZXing Apache-2.0)+ CSPRNG 脚注;仓库链接同上
+- 关于 = Shizuku 同款**极简小弹窗**(非独立页,照搬其 about_dialog 布局):
+  40dp 图标 + 应用名(18sp)/裸版本号(PackageManager 取 versionName)/
+  源码链接行(浏览器打开);点空白关闭(无按钮,SAS 弹窗同款)。
+  开放源代码页(独立页):仅组件与许可证清单(core 自研 / libsodium
+  ISC / spake2 按文件 / Compose、Tink、ZXing Apache-2.0),
+  无解释性文字(所有者指示 2026-11 第五批)
 - SAS = 身份仪表盘(非关卡):9 位数字 3-3-3 常驻对话屏顶栏(菜单图标左侧);
   点击弹出放大卡片(大号数字点击即复制 + 二维码)。MITM 主防线是配对
   暗号(§4),SAS 是终身核对仪表盘,含保存会话重开后的对账
@@ -425,6 +426,20 @@ trademark_note: "发布前做类别 9/42 商标检索;英文表述永远用'两�
 | 续聊/邀请 | (无此概念) | 纯钥匙直连;type 0x05 设计中途否决 |
 
 ### 2.0-draft 之后(实现期变更)
+
+- **2026-11 首页菜单 Shizuku 比例 + 关于/开源页极简**(所有者指示,UI 优化
+  第五批):首页 ⋮ 菜单换用自研 `OverflowMenu`——M3 `DropdownMenu` 默认
+  (112dp 最小宽 + 上下各 8dp 容器内边距)呈正方形,与 Shizuku 实际的
+  appcompat 溢出菜单几何(`abc_popup_menu_item_layout` minWidth 196dip、
+  行高 `listPreferredItemHeightSmall` 48dp、文字内缩 16dp、无容器竖向
+  内边距,两项 ≈196×96 ≈2:1)不符;新组件(Components.kt)逐项复刻该
+  几何,保留 M3 开合动画/阴影/造型与 Box 锚定写法,条目 = 48dp 行 +
+  16sp 文字。"关于"弹窗照搬 Shizuku `about_dialog` 布局:40dp 图标 +
+  应用名(18sp)/裸版本号/源码链接行,定位三句话与许可证行移除;开放
+  源代码页仅留组件与许可证清单(AGPL 说明段、GitHub 行、CSPRNG 脚注
+  全部移除)。双语资源同步:新增 about_source_code,删除 about_tagline/
+  about_version/about_github/license_label/license_value/oss_intro/
+  oss_components_header/oss_footnote
 
 - **2026-11 菜单锚点修正 + 关于改弹窗**(真机反馈,第四批收尾):三点
   下拉菜单曾直接放在 Row 里、锚到整行,在真机上左展开——改为 Box 包住

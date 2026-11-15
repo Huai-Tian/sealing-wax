@@ -12,20 +12,31 @@
 package sealing.wax.ui
 
 import android.graphics.Bitmap
+import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.updateTransition
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -38,12 +49,22 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupPositionProvider
+import androidx.compose.ui.window.PopupProperties
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.qrcode.QRCodeWriter
 import sealing.wax.R
@@ -159,4 +180,99 @@ fun RenameSessionDialog(
             TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) }
         },
     )
+}
+
+/* ---- Shizuku 式溢出菜单(所有者指示,UI 优化第五批) ---- */
+
+/** appcompat 溢出菜单(Shizuku 首页 ⋮ 同款)的几何,来源逐项核对过:
+ *  abc_popup_menu_item_layout 的 minWidth 196dip、
+ *  dropdownListPreferredItemHeight = listPreferredItemHeightSmall = 48dp、
+ *  文字内缩 16dp、列表无容器竖向内边距。M3 DropdownMenu 默认
+ *  (112dp 最小宽 + 上下各 8dp 内边距)呈正方形,比例偏方——本组件
+ *  复刻 Shizuku 的宽高比(两项 ≈ 196×96,≈2:1 横向矩形)。 */
+private val OverflowMenuMinWidth = 196.dp
+private val OverflowMenuItemHeight = 48.dp
+private val OverflowMenuItemPadding = 16.dp
+
+/**
+ * Shizuku 溢出菜单同款比例的下拉菜单。放进包住锚点按钮的 Box 里使用
+ * (锚点 = 父布局,与 DropdownMenu 相同);条目用 [OverflowMenuItem]。
+ */
+@Composable
+fun OverflowMenu(
+    expanded: Boolean,
+    onDismissRequest: () -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val expandedState = remember { MutableTransitionState(false) }
+    expandedState.targetState = expanded
+
+    if (expandedState.currentState || expandedState.targetState) {
+        Popup(
+            onDismissRequest = onDismissRequest,
+            popupPositionProvider = OverflowMenuPositionProvider,
+            properties = PopupProperties(focusable = true),
+        ) {
+            /* 开合动画与 M3 DropdownMenu 同款:缩放 + 淡入,绕锚点角 */
+            val transition = updateTransition(expandedState, "OverflowMenu")
+            val scale by transition.animateFloat(transitionSpec = { tween(150) }) {
+                if (it) 1f else 0.8f
+            }
+            val alpha by transition.animateFloat(transitionSpec = { tween(150) }) {
+                if (it) 1f else 0f
+            }
+            val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+            Surface(
+                modifier = modifier.graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                    this.alpha = alpha
+                    transformOrigin = TransformOrigin(if (rtl) 0f else 1f, 0f)
+                },
+                shape = MenuDefaults.shape,
+                color = MenuDefaults.containerColor,
+                shadowElevation = MenuDefaults.ShadowElevation,
+            ) {
+                /* 无竖向内边距:行高 48dp 连续堆叠,同 appcompat 溢出列表 */
+                Column(Modifier.width(IntrinsicSize.Max), content = content)
+            }
+        }
+    }
+}
+
+/** 溢出菜单条目:48dp 行高、16dp 文字内缩、整行最小宽 196dp。 */
+@Composable
+fun OverflowMenuItem(text: String, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .widthIn(min = OverflowMenuMinWidth)
+            .heightIn(min = OverflowMenuItemHeight)
+            .clickable(onClick = onClick)
+            .padding(horizontal = OverflowMenuItemPadding),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(text, style = MaterialTheme.typography.bodyLarge)
+    }
+}
+
+/** 菜单末端对齐锚点、顶边贴锚点底边,越界时收进窗口(同 DropdownMenu 语义)。 */
+private object OverflowMenuPositionProvider : PopupPositionProvider {
+    override fun calculatePosition(
+        anchorBounds: IntRect,
+        windowSize: IntSize,
+        layoutDirection: LayoutDirection,
+        popupContentSize: IntSize,
+    ): IntOffset {
+        val x = if (layoutDirection == LayoutDirection.Ltr) {
+            (anchorBounds.right - popupContentSize.width).coerceAtLeast(0)
+        } else {
+            anchorBounds.left.coerceAtMost(windowSize.width - popupContentSize.width)
+        }
+        val y = anchorBounds.bottom.coerceAtMost(
+            (windowSize.height - popupContentSize.height).coerceAtLeast(0),
+        )
+        return IntOffset(x, y)
+    }
 }

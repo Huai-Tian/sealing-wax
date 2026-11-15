@@ -17,23 +17,18 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.net.Uri
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -46,14 +41,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import sealing.wax.R
 
 /** 链接目标(非 UI 文案,常量即可;显示文字一律走资源)。 */
@@ -74,12 +67,13 @@ private fun openRepo(context: Context) {
     context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(REPO_URL)))
 }
 
-/** 关于 = Shizuku 式小弹窗(§9,非独立页):图标/应用名/定位三句话/
- *  版本/GitHub 行/许可证行;无按钮,点空白关闭(SAS 弹窗同款)。 */
+/** 关于 = Shizuku 同款极简弹窗(§9,其 about_dialog 布局照搬):40dp 图标 +
+ *  应用名(18sp)/ 裸版本号 / 源码链接,横向排布;无标语、无许可证行;
+ *  无按钮,点空白关闭(SAS 弹窗同款)。 */
 @Composable
 fun AboutDialog(onDismiss: () -> Unit) {
     val context = LocalContext.current
-    val icon = remember { launcherIcon(context, 128) }
+    val icon = remember { launcherIcon(context, 120) }
     val version = remember {
         @Suppress("DEPRECATION")    /* flags 变体需 API 28+;旧式调用全版本可用 */
         context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "?"
@@ -90,85 +84,41 @@ fun AboutDialog(onDismiss: () -> Unit) {
         /* M3 要求 confirmButton 必传;空槽 = 无按钮,点空白关闭 */
         confirmButton = {},
         text = {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-                modifier = Modifier.fillMaxWidth(),
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
             ) {
-                Image(icon, contentDescription = null, modifier = Modifier.size(72.dp))
-                Text(
-                    stringResource(R.string.app_name),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                )
-                Text(
-                    stringResource(R.string.about_tagline),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                )
-                Text(
-                    stringResource(R.string.about_version, version),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Image(icon, contentDescription = null, modifier = Modifier.size(40.dp))
                 Column(
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(top = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.padding(start = 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant)
-                            .clickable { openRepo(context) }
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            stringResource(R.string.about_github),
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.weight(1f),
-                        )
-                        Icon(
-                            Icons.Default.OpenInNew,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant)
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            stringResource(R.string.license_label),
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.weight(1f),
-                        )
-                        Text(
-                            stringResource(R.string.license_value),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
+                    Text(
+                        stringResource(R.string.app_name),
+                        fontSize = 18.sp,
+                    )
+                    Text(version, style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        stringResource(R.string.about_source_code),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier
+                            .padding(top = 8.dp)
+                            .clickable { openRepo(context) },
+                    )
                 }
             }
         },
     )
 }
 
-/** 开放源代码页(§9,独立页):AGPL 说明 + 组件许可证清单 + CSPRNG 脚注。 */
+/** 开放源代码页(§9,独立页):仅组件与许可证清单(所有者指示,UI 优化
+ *  第五批——解释性文字全部移除,许可以组件条目为准)。 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun OpenSourceScreen(onBack: () -> Unit) {
-    val context = LocalContext.current
-
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
@@ -192,36 +142,6 @@ fun OpenSourceScreen(onBack: () -> Unit) {
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text(
-                stringResource(R.string.oss_intro),
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .clickable { openRepo(context) }
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    stringResource(R.string.about_github),
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.weight(1f),
-                )
-                Icon(
-                    Icons.Default.OpenInNew,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Text(
-                stringResource(R.string.oss_components_header),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(top = 8.dp),
-            )
             @Composable
             fun Component(name: Int, license: Int) {
                 Column {
@@ -242,13 +162,6 @@ fun OpenSourceScreen(onBack: () -> Unit) {
             Component(R.string.oss_c4, R.string.oss_lic_apache)
             Component(R.string.oss_c5, R.string.oss_lic_apache)
             Component(R.string.oss_c6, R.string.oss_lic_apache)
-            Text(
-                stringResource(R.string.oss_footnote),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 8.dp),
-            )
-            Spacer(Modifier.height(24.dp))
         }
     }
 }
