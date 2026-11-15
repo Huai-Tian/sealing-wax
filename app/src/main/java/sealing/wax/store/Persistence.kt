@@ -69,6 +69,13 @@ object Persistence {
             }
             .orEmpty()
 
+    /** Saved-session directory count: lets callers tell "empty because the
+     *  load failed" from "empty because fresh install" (listSessions swallows
+     *  per-session errors, including a transient first Tink/Keystore init at
+     *  ultra-early cold start, as an empty list). */
+    fun sessionDirCount(context: Context): Int =
+        sessionsRoot(context).listFiles { f -> f.isDirectory }?.size ?: 0
+
     fun readSession(context: Context, id: String): SavedSession? =
         runCatching { SavedSession.fromJson(id, readEnvelope(context, id)) }.getOrNull()
 

@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -31,15 +32,18 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import sealing.wax.store.Persistence
-import sealing.wax.store.SavedSession
 import sealing.wax.ui.ChatScreen
 import sealing.wax.ui.HomeScreen
 import sealing.wax.ui.JoinSessionScreen
 import sealing.wax.ui.NewSessionScreen
+import sealing.wax.ui.SessionListState
 import sealing.wax.ui.theme.SealingWaxTheme
 
 /** 导航:无导航库,一个密封类 + 返回处理足够。 */
@@ -89,14 +93,32 @@ private fun App() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var dest by remember { mutableStateOf<Dest>(Dest.Home) }
-    var sessions by remember { mutableStateOf(listOf<SavedSession>()) }
     var chatTitle by remember { mutableStateOf("会话") }
     var chatSaved by remember { mutableStateOf(false) }
+    var listState by remember { mutableStateOf<SessionListState>(SessionListState.Loading) }
 
+    /* 读取是一个显式状态机,空列表只在 Ready 里有意义——"还在加载"与
+     * "读不出来"不再伪装成"没有会话"(真机反馈 2026-11 的结构性修复)。
+     * 加载在 Loading 态内保持耐心:目录在而列表空 = 瞬时失败(冷启动
+     * 极早期 Tink/Keystore 首次初始化可能未热),退避重试后才判 Failed */
     fun reload() {
         scope.launch {
-            val list = withContext(Dispatchers.IO) { Persistence.listSessions(context) }
-            sessions = list
+            listState = SessionListState.Loading
+            var list = withContext(Dispatchers.IO) { Persistence.listSessions(context) }
+            var failed = list.isEmpty() &&
+                    withContext(Dispatchers.IO) { Persistence.sessionDirCount(context) } > 0
+            var attempt = 0
+            while (failed && attempt < 3) {
+                attempt++
+                delay(300L * attempt)    /* 300 / 600 / 900ms,加载动画之下 */
+                list = withContext(Dispatchers.IO) { Persistence.listSessions(context) }
+                failed = list.isEmpty() &&
+                        withContext(Dispatchers.IO) {
+                            Persistence.sessionDirCount(context)
+                        } > 0
+            }
+            listState = if (failed) SessionListState.Failed
+                       else SessionListState.Ready(list)
         }
     }
 
@@ -105,17 +127,29 @@ private fun App() {
         reload()
     }
 
-    /* 冷启动/Activity 重建后的首次组合必须加载会话列表:此前 reload() 只在
-     * goHome() 导航路径上运行,杀进程重开(或旋转)后首页永远空白——
-     * 保存的对话"消失"实为列表未读盘(真机反馈 2026-11,§11-5 回归) */
+    /* 双触发:首次组合开读;此后每次 ON_RESUME 仅对 Failed 自动重试
+     * (Ready 时不刷——切 IM 返回不该闪加载态;Loading 中不重复开读) */
     LaunchedEffect(Unit) { reload() }
+    val owner = LocalContext.current as? ComponentActivity
+    DisposableEffect(owner) {
+        val obs = LifecycleEventObserver { _, e ->
+            if (e == Lifecycle.Event.ON_RESUME &&
+                listState is SessionListState.Failed
+            ) {
+                reload()
+            }
+        }
+        owner?.lifecycle?.addObserver(obs)
+        onDispose { owner?.lifecycle?.removeObserver(obs) }
+    }
 
     when (dest) {
         Dest.Home -> {
             /* 退出 App:直接清零,无弹窗 (§5) —— 未保存会话随进程消失 */
             BackHandler { (context as? Activity)?.finish() }
             HomeScreen(
-                sessions = sessions,
+                state = listState,
+                onRetryLoad = { reload() },
                 onNewSession = { dest = Dest.NewSession },
                 onJoinSession = { dest = Dest.JoinSession },
                 onOpenSession = { id ->
