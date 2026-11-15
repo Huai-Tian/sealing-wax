@@ -48,6 +48,27 @@ public class JniSmoke {
         check(new String(WaxNative.openText(b, padded[0]), "UTF-8").equals("hi"), "pad strip");
         WaxNative.setPadding(a, false, 0);
 
+        /* charset stress through the real JNI boundary: the v2 marker
+         * class — UTF-8 tails of 0x80 (一 E4B880, 呀 E59180, 😀 F09F9880,
+         * 🐀 F09F9080) plus controls (😂, Latin-1, kana); the message
+         * ENDS in 呀, the exact owner-reported case */
+        String tricky = "😀🐀😂café über のあぱ一好呀";
+        byte[] trickyBytes = tricky.getBytes("UTF-8");
+        String[] ts = WaxNative.sealText(a, trickyBytes);
+        check(ts != null && ts.length == 1, "charset one piece");
+        byte[] trickyBack = WaxNative.openText(b, ts[0]);
+        check(java.util.Arrays.equals(trickyBack, trickyBytes), "charset bytes exact");
+        check(new String(trickyBack, "UTF-8").equals(tricky), "charset string exact");
+
+        /* same with padding on: the marker carries a 0x00 */
+        WaxNative.setPadding(a, true, 1000);
+        String[] tsp = WaxNative.sealText(a, trickyBytes);
+        check(tsp != null && tsp.length == 1 && tsp[0].length() == 1000,
+              "charset padded len " + (tsp == null ? -1 : tsp[0].length()));
+        check(new String(WaxNative.openText(b, tsp[0]), "UTF-8").equals(tricky),
+              "charset padded roundtrip");
+        WaxNative.setPadding(a, false, 0);
+
         /* replay */
         try {
             WaxNative.openText(b, padded[0]);

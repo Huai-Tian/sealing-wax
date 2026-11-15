@@ -583,6 +583,63 @@ static int test_padding(void)
     return failures ? 1 : 0;
 }
 
+/* ---- tail-byte stress: the padding marker must never eat plaintext ---- */
+
+/* Every possible final byte value, padding off and on. This is the
+ * machine-checked closure of the "呀" bug class: any character whose
+ * UTF-8 encoding ends in 0x80 (一 E4B880, 呀 E59180, 😀 F09F9880,
+ * 🐀 F09F9080, ... 327 common hanzi + a pile of emoji) must survive. */
+static int test_tail_bytes(void)
+{
+    swx_session *a = NULL, *b = NULL;
+    char pieces[MAX_PIECES][PIECE_STRIDE];
+    uint32_t np = 0;
+    uint8_t out[SWX_TEXT_MAX_PT];
+    size_t out_len = 0;
+
+    CHECK(pair(&a, &b) == 0);
+
+    /* padding off: every final byte 0x00..0xFF roundtrips byte-exact */
+    for (int t = 0; t < 256; t++) {
+        const uint8_t pt[4] = { 'x', 'y', 'z', (uint8_t) t };
+        CHECK(swx_session_seal_text(a, pt, sizeof pt, NULL,
+                                    (char *) pieces, PIECE_STRIDE,
+                                    MAX_PIECES, &np) == SWX_OK);
+        CHECK(open_b64(b, pieces[0], out, sizeof out, &out_len) == SWX_OK);
+        CHECK(out_len == 4 && memcmp(out, pt, 4) == 0);
+    }
+
+    /* padding on: the marker always carries a 0x00, so the strip can
+     * never touch a genuine plaintext tail byte */
+    CHECK(swx_session_set_padding(a, 1, 1000) == SWX_OK);
+    for (int t = 0; t < 256; t++) {
+        const uint8_t pt[4] = { 'x', 'y', 'z', (uint8_t) t };
+        CHECK(swx_session_seal_text(a, pt, sizeof pt, NULL,
+                                    (char *) pieces, PIECE_STRIDE,
+                                    MAX_PIECES, &np) == SWX_OK);
+        CHECK(strlen(pieces[0]) == 1000);
+        CHECK(open_b64(b, pieces[0], out, sizeof out, &out_len) == SWX_OK);
+        CHECK(out_len == 4 && memcmp(out, pt, 4) == 0);
+    }
+    CHECK(swx_session_set_padding(a, 0, 0) == SWX_OK);
+
+    /* boundary contract: an input genuinely ending in [0x80][0x00+] IS
+     * the marker and is stripped — unreachable from UTF-8 text (0x00
+     * never appears in UTF-8), documented residual (wire-spec §9) */
+    {
+        const uint8_t markerish[] = { 'a', 0x80, 0x00 };
+        CHECK(swx_session_seal_text(a, markerish, sizeof markerish, NULL,
+                                    (char *) pieces, PIECE_STRIDE,
+                                    MAX_PIECES, &np) == SWX_OK);
+        CHECK(open_b64(b, pieces[0], out, sizeof out, &out_len) == SWX_OK);
+        CHECK(out_len == 1 && out[0] == 'a');
+    }
+
+    swx_session_free(a);
+    swx_session_free(b);
+    return failures ? 1 : 0;
+}
+
 /* ---- state export/import (§6) ---- */
 
 static int test_state_roundtrip(void)
@@ -1090,6 +1147,7 @@ int main(void)
     r |= test_replay_tamper();
     r |= test_transport_mask();
     r |= test_padding();
+    r |= test_tail_bytes();
     r |= test_state_roundtrip();
     r |= test_file_roundtrip();
     r |= test_file_padding_and_edges();

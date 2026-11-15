@@ -45,7 +45,7 @@ g++ -shared -fPIC -O2 -std=c++17 \
 
 echo "== compiling & running Java smoke =="
 mkdir -p "$WORK/classes"
-javac -d "$WORK/classes" \
+javac -encoding UTF-8 -d "$WORK/classes" \
       "$ROOT/tools/jni-smoke/WaxNative.java" "$ROOT/tools/jni-smoke/JniSmoke.java"
 java -Djava.library.path="$WORK" --enable-native-access=ALL-UNNAMED \
      -cp "$WORK/classes" JniSmoke
