@@ -187,6 +187,17 @@ object SessionManager {
         freeConversation()
     }
 
+    /** Renames the live saved conversation (§5: 会话内点顶栏名称). Writes
+     *  the envelope immediately through the §4 sync path so a crash after
+     *  the rename keeps the new name. Returns false when nothing is saved. */
+    fun renameCurrent(name: String, context: Context = ctx()): Boolean {
+        val s = saved ?: return false
+        s.name = name
+        dirty = true
+        syncNow(context)
+        return true
+    }
+
     /** Save-or-discard dialog outcome for an unsaved conversation. */
     fun saveLiveAs(name: String, context: Context = ctx()) {
         require(handle != 0L) { "没有活跃会话" }

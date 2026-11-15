@@ -98,11 +98,13 @@ fun ChatScreen(
     title: String,
     isSaved: Boolean,
     onExit: () -> Unit,
+    onRenameTitle: ((String) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
 
+    var renameOpen by remember { mutableStateOf(false) }
     var input by remember { mutableStateOf("") }
     var openNote by remember { mutableStateOf<String?>(null) }
     var panelOpen by remember { mutableStateOf(false) }
@@ -266,9 +268,18 @@ fun ChatScreen(
 
     Scaffold(
         topBar = {
-            /* 标题居左(2026-11):紧邻返回;SAS 与菜单仍在右侧 */
+            /* 标题居左(2026-11):紧邻返回;已保存会话点标题改名(§5) */
             TopAppBar(
-                title = { Text(title) },
+                title = {
+                    Text(
+                        title,
+                        modifier = if (isSaved && onRenameTitle != null) {
+                            Modifier.clickable { renameOpen = true }
+                        } else {
+                            Modifier
+                        },
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = { doExit() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "退出对话")
@@ -439,6 +450,15 @@ fun ChatScreen(
                 }
             }
         }
+    }
+
+    /* 会话内改名(§5:点顶栏名称;仅已保存会话,与首页长按共用弹窗) */
+    if (renameOpen) {
+        RenameSessionDialog(
+            initialName = title,
+            onDismiss = { renameOpen = false },
+            onConfirm = { n -> onRenameTitle?.invoke(n) },
+        )
     }
 
     /* SAS 放大核对(§9 仪表盘的放大卡片:大字+二维码+复制) */

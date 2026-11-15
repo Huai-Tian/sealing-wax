@@ -230,6 +230,9 @@ private fun App() {
             ChatScreen(
                 title = chatTitle,
                 isSaved = chatSaved,
+                onRenameTitle = { name ->
+                    if (SessionManager.renameCurrent(name)) chatTitle = name
+                },
                 onExit = { goHome() },
             )
         }

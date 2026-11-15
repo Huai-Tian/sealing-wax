@@ -42,7 +42,6 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -220,23 +219,10 @@ fun HomeScreen(
     }
 
     renameTarget?.let { s ->
-        var name by remember(s.id) { mutableStateOf(s.name) }
-        AlertDialog(
-            onDismissRequest = { renameTarget = null },
-            title = { Text("重命名会话") },
-            text = {
-                Column {
-                    Text("命名的对象是会话(一把钥匙),不是联系人。")
-                    OutlinedTextField(value = name, onValueChange = { name = it }, singleLine = true)
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    if (name.isNotBlank()) onRenameSession(s, name.trim())
-                    renameTarget = null
-                }) { Text("确定") }
-            },
-            dismissButton = { TextButton(onClick = { renameTarget = null }) { Text("取消") } },
+        RenameSessionDialog(
+            initialName = s.name,
+            onDismiss = { renameTarget = null },
+            onConfirm = { onRenameSession(s, it) },
         )
     }
 
