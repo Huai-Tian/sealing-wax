@@ -145,8 +145,10 @@ fun ChatScreen(
                 input = ""
                 openNote = "已收 ${r.got}/${r.total} 片,继续粘贴其余分片…"
             }
+            /* 提示是当前内容的纯函数:普通输入(E_FORMAT)清除旧提示,
+             * 不残留上一次的报错;其余错误如实显示(真机反馈 2026-11) */
             is OpenResult.Failure ->
-                if (r.code != "SWX_E_FORMAT") openNote = r.message
+                openNote = if (r.code == "SWX_E_FORMAT") null else r.message
         }
     }
 
