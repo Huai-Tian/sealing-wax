@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">火漆</string>
+    <!-- 首页顶栏标题(Shizuku 式应用名;默认资源 = 英文用户) -->
+    <string name="home_title">Sealing Wax</string>
 </resources>

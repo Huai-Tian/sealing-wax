@@ -53,9 +53,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import sealing.wax.R
 import sealing.wax.store.SavedSession
 import java.text.DateFormat
 import java.util.Date
@@ -110,96 +112,104 @@ fun HomeScreen(
         },
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
-            when (state) {
-                SessionListState.Loading -> Column(
-                    Modifier.align(Alignment.Center),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    CircularProgressIndicator()
-                    Text(
-                        "正在读取会话…",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-
-                SessionListState.Failed -> Column(
-                    Modifier.align(Alignment.Center),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Text(
-                        "会话在,但此刻读不出来。\n" +
-                            "可能原因:系统密钥库未就绪或瞬时错误。",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.error,
-                        textAlign = TextAlign.Center,
-                    )
-                    TextButton(onClick = onRetryLoad) { Text("重试") }
-                }
-
-                is SessionListState.Ready -> {
-                    val sessions = state.sessions
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        item {
+            Column(Modifier.fillMaxSize()) {
+                /* Shizuku/KernelSU 式顶栏:应用名即标题,资源自动本地化(§9) */
+                Text(
+                    stringResource(R.string.home_title),
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(start = 16.dp, top = 24.dp, end = 16.dp, bottom = 12.dp),
+                )
+                Box(Modifier.weight(1f).fillMaxWidth()) {
+                    when (state) {
+                        SessionListState.Loading -> Column(
+                            Modifier.align(Alignment.Center),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            CircularProgressIndicator()
                             Text(
-                                "已保存的会话",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
+                                "正在读取会话…",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                        if (sessions.isEmpty()) {
-                            item {
+
+                        SessionListState.Failed -> Column(
+                            Modifier.align(Alignment.Center),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            Text(
+                                "会话在,但此刻读不出来。\n" +
+                                    "可能原因:系统密钥库未就绪或瞬时错误。",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.error,
+                                textAlign = TextAlign.Center,
+                            )
+                            TextButton(onClick = onRetryLoad) { Text("重试") }
+                        }
+
+                        is SessionListState.Ready -> {
+                            val sessions = state.sessions
+                            if (sessions.isEmpty()) {
+                                /* 空态:原"已保存的会话"块的小字,移至居中(§9) */
                                 Text(
                                     "还没有保存的会话。点右下角 + 开始。\n" +
                                         "保存与否,每次退出对话屏时再决定。",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier
+                                        .align(Alignment.Center)
+                                        .padding(horizontal = 32.dp),
                                 )
-                            }
-                        }
-                        items(sessions, key = { it.id }) { s ->
-                            Card(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .combinedClickable(
-                                        onClick = { onOpenSession(s.id) },
-                                        onLongClick = { renameTarget = s },
-                                    ),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                ),
-                            ) {
-                                Row(
-                                    Modifier.padding(16.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
+                            } else {
+                                LazyColumn(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(12.dp),
                                 ) {
-                                    Icon(
-                                        Icons.Default.Lock,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                    )
-                                    Spacer(Modifier.width(12.dp))
-                                    Column(Modifier.weight(1f)) {
-                                        Text(s.name, style = MaterialTheme.typography.titleMedium)
-                                        Text(
-                                            "最近使用 " + DateFormat.getDateTimeInstance().format(Date(s.lastUsedMs)),
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
+                                    items(sessions, key = { it.id }) { s ->
+                                        Card(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .combinedClickable(
+                                                    onClick = { onOpenSession(s.id) },
+                                                    onLongClick = { renameTarget = s },
+                                                ),
+                                            colors = CardDefaults.cardColors(
+                                                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                            ),
+                                        ) {
+                                            Row(
+                                                Modifier.padding(16.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.Lock,
+                                                    contentDescription = null,
+                                                    tint = MaterialTheme.colorScheme.primary,
+                                                )
+                                                Spacer(Modifier.width(12.dp))
+                                                Column(Modifier.weight(1f)) {
+                                                    Text(s.name, style = MaterialTheme.typography.titleMedium)
+                                                    Text(
+                                                        "最近使用 " + DateFormat.getDateTimeInstance().format(Date(s.lastUsedMs)),
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    )
+                                                }
+                                                IconButton(onClick = { deleteTarget = s }) {
+                                                    Icon(Icons.Default.Delete, contentDescription = "删除")
+                                                }
+                                            }
+                                        }
                                     }
-                                    IconButton(onClick = { deleteTarget = s }) {
-                                        Icon(Icons.Default.Delete, contentDescription = "删除")
-                                    }
+                                    item { Spacer(Modifier.height(88.dp)) }
                                 }
                             }
                         }
-                        item { Spacer(Modifier.height(88.dp)) }
                     }
                 }
             }

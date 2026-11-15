@@ -1,0 +1,4 @@
+<resources>
+    <!-- 中文用户的首页顶栏标题;系统按资源限定符自动解析,代码零判断 -->
+    <string name="home_title">火漆</string>
+</resources>
