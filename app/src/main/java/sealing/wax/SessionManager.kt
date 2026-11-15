@@ -36,7 +36,9 @@ data class UiMessage(
 sealed interface OpenResult {
     data class Complete(val text: String) : OpenResult
     data class Partial(val got: Int, val total: Int) : OpenResult
-    data class Failure(val message: String) : OpenResult
+    /** code: the SWX error name (e.g. "SWX_E_FORMAT") so callers can tell
+     *  "not ciphertext at all" (normal typing, silent) from honest errors. */
+    data class Failure(val message: String, val code: String? = null) : OpenResult
 }
 
 data class FileMeta(val name: String, val size: Long)
@@ -272,7 +274,7 @@ object SessionManager {
             val pt = try {
                 WaxNative.openText(handle, t)
             } catch (e: IllegalStateException) {
-                return OpenResult.Failure(friendlyError(e.message, saved != null))
+                return OpenResult.Failure(friendlyError(e.message, saved != null), e.message)
             }
             pendingPieces.add(t)
             if (pt != null) {

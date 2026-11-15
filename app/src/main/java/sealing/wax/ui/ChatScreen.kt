@@ -17,6 +17,8 @@ import android.provider.OpenableColumns
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,28 +30,28 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Attachment
 import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -58,6 +60,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -67,12 +70,15 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import sealing.wax.FileMeta
@@ -98,8 +104,8 @@ fun ChatScreen(
     val scope = rememberCoroutineScope()
 
     var input by remember { mutableStateOf("") }
-    var paste by remember { mutableStateOf("") }
     var openNote by remember { mutableStateOf<String?>(null) }
+    var panelOpen by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
     var sasOpen by remember { mutableStateOf(false) }
     var saveDialog by remember { mutableStateOf(false) }
@@ -114,6 +120,31 @@ fun ChatScreen(
     LaunchedEffect(SessionManager.messages.size) {
         if (SessionManager.messages.isNotEmpty()) {
             listState.animateScrollToItem(SessionManager.messages.size - 1)
+        }
+    }
+
+    /* 粘贴即解密(§5/§15):防抖后在活会话上直接试解——成功即收文,
+     * [解密]按钮不存在;E_FORMAT = 普通输入,静默;其余如实提示 */
+    val keyboard = LocalSoftwareKeyboardController.current
+    LaunchedEffect(input) {
+        if (input.isBlank()) return@LaunchedEffect
+        delay(150)    /* 防抖:打字停顿后才试解;每次 input 变化重启本协程 */
+        val r = try {
+            SessionManager.openPasted(input)
+        } catch (e: IllegalStateException) {
+            return@LaunchedEffect    /* 无活跃会话等边缘,静默 */
+        }
+        when (r) {
+            is OpenResult.Complete -> {
+                input = ""
+                openNote = null
+            }
+            is OpenResult.Partial -> {
+                input = ""
+                openNote = "已收 ${r.got}/${r.total} 片,继续粘贴其余分片…"
+            }
+            is OpenResult.Failure ->
+                if (r.code != "SWX_E_FORMAT") openNote = r.message
         }
     }
 
@@ -235,7 +266,8 @@ fun ChatScreen(
 
     Scaffold(
         topBar = {
-            CenterAlignedTopAppBar(
+            /* 标题居左(2026-11):紧邻返回;SAS 与菜单仍在右侧 */
+            TopAppBar(
                 title = { Text(title) },
                 navigationIcon = {
                     IconButton(onClick = { doExit() }) {
@@ -317,100 +349,91 @@ fun ChatScreen(
                 item { Spacer(Modifier.height(4.dp)) }
             }
 
-            /* receive card */
-            Card(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                ),
-            ) {
-                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = paste,
-                        onValueChange = { paste = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text("粘贴来自 IM 的密文") },
-                        minLines = 1,
-                        maxLines = 4,
-                    )
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        FilledTonalButton(
-                            onClick = {
-                                val r = try {
-                                    SessionManager.openPasted(paste)
-                                } catch (e: IllegalStateException) {
-                                    OpenResult.Failure(e.message ?: "解密失败")
-                                }
-                                when (r) {
-                                    is OpenResult.Complete -> {
-                                        paste = ""
-                                        openNote = null
-                                    }
-                                    is OpenResult.Partial ->
-                                        openNote = "已收 ${r.got}/${r.total} 片,等待其余分片…"
-                                    is OpenResult.Failure -> openNote = r.message
-                                }
-                            },
-                            enabled = paste.isNotBlank(),
-                        ) {
-                            Icon(Icons.Default.ContentPaste, contentDescription = null)
-                            Spacer(Modifier.width(4.dp))
-                            Text("解密")
-                        }
-                        if (openNote != null) {
-                            Text(
-                                openNote!!,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.tertiary,
-                            )
-                        }
-                    }
-                }
-            }
-
-            /* send row: KPI = one button */
+            /* 统一输入栏(2026-11):收/发一体,粘贴即解密;解密按钮已删除 */
             Card(
                 modifier = Modifier.fillMaxWidth().padding(12.dp),
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                 ),
             ) {
-                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = input,
-                        onValueChange = { input = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text("要加密的明文") },
-                        minLines = 1,
-                        maxLines = 5,
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(
-                            onClick = {
-                                val pieces = SessionManager.sealText(input)
-                                clipboard.setText(AnnotatedString(pieces.joinToString("\n")))
-                                input = ""
-                                Toast.makeText(
-                                    context,
-                                    if (pieces.size == 1) "已加密并复制,去 IM 粘贴"
-                                    else "已加密 ${pieces.size} 片并全部复制,按顺序粘贴",
-                                    Toast.LENGTH_SHORT,
-                                ).show()
-                            },
-                            enabled = input.isNotEmpty(),
-                        ) {
-                            Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null)
-                            Spacer(Modifier.width(4.dp))
-                            Text("加密并复制")
+                Column(
+                    Modifier.padding(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.Bottom,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        OutlinedTextField(
+                            value = input,
+                            onValueChange = { input = it },
+                            modifier = Modifier.weight(0.8f),
+                            label = { Text("明文,或粘贴 IM 密文") },
+                            minLines = 1,
+                            maxLines = 5,
+                        )
+                        /* 右槽 0.2:空框 = "+",有字 = [加密并复制](微信式) */
+                        if (input.isEmpty()) {
+                            Button(
+                                onClick = {
+                                    keyboard?.hide()
+                                    panelOpen = !panelOpen
+                                },
+                                modifier = Modifier.weight(0.2f),
+                                contentPadding = PaddingValues(0.dp),
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = "发文件等入口")
+                            }
+                        } else {
+                            Button(
+                                onClick = {
+                                    val pieces = SessionManager.sealText(input)
+                                    clipboard.setText(AnnotatedString(pieces.joinToString("\n")))
+                                    input = ""
+                                    panelOpen = false
+                                    Toast.makeText(
+                                        context,
+                                        if (pieces.size == 1) "已加密并复制,去 IM 粘贴"
+                                        else "已加密 ${pieces.size} 片并全部复制,一次粘贴即可",
+                                        Toast.LENGTH_SHORT,
+                                    ).show()
+                                },
+                                modifier = Modifier.weight(0.2f),
+                                contentPadding = PaddingValues(0.dp),
+                            ) {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.Send,
+                                    contentDescription = "加密并复制",
+                                )
+                            }
                         }
-                        IconButton(onClick = { pickSource.launch(arrayOf("*/*")) }) {
-                            Icon(Icons.Default.Attachment, contentDescription = "发文件")
-                        }
-                        IconButton(onClick = { pickSwx.launch(arrayOf("*/*")) }) {
-                            Icon(Icons.Default.Lock, contentDescription = "收文件")
+                    }
+                    if (openNote != null) {
+                        Text(
+                            openNote!!,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.tertiary,
+                        )
+                    }
+                    /* "+"面板:可扩展入口磁贴(未来特殊消息往这里加格) */
+                    if (panelOpen) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            PanelTile(
+                                icon = { Icon(Icons.Default.Attachment, contentDescription = null) },
+                                label = "发文件",
+                                onClick = {
+                                    panelOpen = false
+                                    pickSource.launch(arrayOf("*/*"))
+                                },
+                            )
+                            PanelTile(
+                                icon = { Icon(Icons.Default.Lock, contentDescription = null) },
+                                label = "收文件",
+                                onClick = {
+                                    panelOpen = false
+                                    pickSwx.launch(arrayOf("*/*"))
+                                },
+                            )
                         }
                     }
                 }
@@ -562,3 +585,29 @@ private fun MessageBubble(m: UiMessage) {
 }
 
 private fun dirLabel(dir: Int): String = if (dir == DIR_SENT) "我发出" else "我收到"
+
+/** "+"面板入口磁贴(微信式):方形图标 + 标签;未来特殊消息加格即可。 */
+@Composable
+private fun PanelTile(
+    icon: @Composable () -> Unit,
+    label: String,
+    onClick: () -> Unit,
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick)
+            .padding(4.dp),
+    ) {
+        Box(
+            Modifier
+                .size(52.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.45f)),
+            contentAlignment = Alignment.Center,
+        ) { icon() }
+        Spacer(Modifier.height(4.dp))
+        Text(label, style = MaterialTheme.typography.labelMedium)
+    }
+}
