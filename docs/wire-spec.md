@@ -1,39 +1,56 @@
 # 火漆 · Sealing Wax — 线上格式规范 (wire spec)
 
-> 规范版本:1(对应 App magic `SWX1`)。本文是字节级的互操作规范;实现以
-> `app/src/main/cpp/core/` 为准,测试向量见 `docs/vectors.json`。
+> 规范版本:2(2026-11 配对 PAKE 化;数据帧格式与 v1 一致,配对帧为
+> 破坏性变更,magic `SWX1` 编号沿用)。本文是字节级的互操作规范;实现以
+> `app/src/main/cpp/core/` 为准,配对原语以 vendored 的
+> `app/src/main/cpp/spake2/` 为准,测试向量见 `docs/vectors.json`。
 > 所有整数大端(big-endian)。所有字节串在向量中以 hex 或标准 base64
 > (含 `=` 填充、不换行)表示。
 
-## 1. 通用帧头
+## 1. 通用帧头(仅数据帧)
+
+配对帧(v2 起)是**无头 SPAKE2 消息**,不携带下列任何字段。通用头只
+存在于数据帧,且仅在解掩后的本地副本中可见(§3):
 
 ```
 magic   4B  "SWX1"                       常量 53 57 58 31
-type    1B  0x01 邀请 0x02 回复 0x03 文本 0x04 文件
-suite   1B  0x01 = X25519 + HKDF-SHA256 + ChaCha20-Poly1305 (IETF)
+type    1B  0x03 文本密文  0x04 文件密文
+            (0x01 邀请 / 0x02 回复已随裸握手废除,编号保留永不复用)
+suite   1B  0x01 = SPAKE2 + HKDF-SHA256 + ChaCha20-Poly1305 (IETF)
 ```
 
 收到未知 `type` 必须明确拒绝;收到 `suite != 0x01` 必须明确拒绝
 (错误码 `SWX_E_UNSUPPORTED`),绝不产出错误明文。0x02 为未来算法迁移
 保留编号(见 README_AGENT §8)。
 
-## 2. 邀请 / 回复帧(54B)
+## 2. 配对帧(无头 SPAKE2 消息;邀请 32B,回复 64B)
 
 ```
-header  6B   (magic + type + suite)
-pubkey  32B  发起方(type 0x01)/ 接收方(type 0x02)的 X25519 公钥
-salt    16B  本端随机盐(CSPRNG)
+invite:  32B  发起方 SPAKE2 份额(Edwards 点编码;无 magic、无 type、无 suite)
+reply:   64B  接收方 SPAKE2 份额(32B) || confirm(32B)
 ```
 
-邀请帧由发起方((inviter)生成;接收方粘贴后生成回复帧。两帧布局相同,
-仅 `type` 与载荷归属不同。公钥为自身密钥的 `crypto_scalarmult_base`
-输出;私钥在配对完成后即被销毁。
-
-邀请/回复帧保持明文可识别(掩握手需要先有共享密钥,鸡生蛋;任何接收
-方可用的识别规则,服务器同样能跑)。这是既定交换:配对仪式可识别
-(罕见、一次性),日常数据帧不可识别(§3 传输掩码)。明文握手不提供
-任何解掩能力——解掩只缺 `session_key`,而它只缺 ECDH 共享秘密,
-私钥永不上链路(论证见 README_AGENT §4)。
+- **原语**:平衡 SPAKE2 over curve25519,实现为 vendored 的 BoringSSL
+  `spake25519` C 移植(`app/src/main/cpp/spake2/`,来源与许可证见其
+  README)。消息结构:`share = ephemeral_point + password_blinded_point`;
+  输出 `pake_shared` = SHA-512(有序名字 || 双方份额 || DH 结果 || 暗号哈希)。
+- **transcript 名字**:发起方 `"swx-inviter"`,接收方 `"swx-responder"`
+  ——角色绑定盲化方向(M/N),份额反射回本端不可能完成配对。
+- **暗号永不上线**:识别一帧配对消息的唯一依据是暗号本身;服务器无
+  暗号即无判定。每次错误暗号猜测都需要一次完整配对交互(在线猜),
+  对截获份额的离线暴力不可行。
+- **confirm**:仅回复帧携带,`HKDF-SHA256-Expand(pake_shared, "confirm", 32)`。
+  发起方在 finish 时校验——不匹配(暗号不一致)即 `SWX_E_CRYPTO`,
+  永不建立会话。接收方无配对期确认路径(两帧下限):由发起方首条
+  可解密消息隐式确认。
+- **base64 编码后**:邀请码 44 字符,回复码 88 字符;解码必须严格
+  (§7 同款规则)。长度即格式:邀请码 ≠ 32B、回复码 ≠ 64B 为
+  `SWX_E_FORMAT`。
+- **统计边界(如实记录)**:份额是 Edwards 点编码,随机 32B 可解码为
+  合法点的概率 ≈ 1/2——配对帧带有 ≈1 bit/帧的统计结构(单帧似然比
+  ~2×,成对 ~4×),远弱于 v1 已废除的确定性 `SWX1` 前缀(base64 恒以
+  `U1dYMQ` 开头,100% 确认),但非严格为零。均匀份额需要 Elligator
+  映射,无成熟 C 实现可用。
 
 ## 3. 数据帧(文本/文件共用)
 
@@ -87,11 +104,10 @@ aad = magic(4) || type(1) || suite(1) || counter(8) || fingerprint(16)
 ## 5. 密钥编排
 
 ```
-shared      = X25519(sk, peer_pk)                    # 拒绝全零结果
-salt        = inviter_salt(16) || responder_salt(16) # 角色定序,两端一致
-prk         = HKDF-SHA256-Extract(salt, shared)
-session_key = HKDF-SHA256-Expand(prk, "session" || suite, 32)
-sas_raw     = HKDF-SHA256-Expand(prk, "sas", 64)
+pake_shared = SPAKE2(暗号)                      # 64B;暗号错 ⇒ 输出不一致
+session_key = HKDF-SHA256-Expand(pake_shared, "session" || suite, 32)
+sas_raw     = HKDF-SHA256-Expand(pake_shared, "sas", 64)
+confirm     = HKDF-SHA256-Expand(pake_shared, "confirm", 32)   (回复帧)
 msg_key     = HKDF-SHA256-Expand(session_key,
                                   "msg" || dir(1) || counter(8 BE), 32)
 mask_ks     = HKDF-SHA256-Expand(session_key, "mask" || nonce(12), 38)
@@ -186,5 +202,7 @@ thresh(2 BE) rsv(2)=0 session_key(32) blake2b-128(16 over前44B)
 ## 12. 安全主张边界
 
 本规范覆盖的保证:信道读取、篡改/伪造、重放/延迟、首次配对 MITM
-(SAS 带外核对)、数据帧协议指纹不可识别(§3 传输掩码)。不承诺:
-解锁态设备被完全掌控、通信元数据、对端背叛。见 README_AGENT §2。
+(PAKE 暗号 + confirm;SAS 仪表盘带外核对)、数据帧协议指纹不可识别
+(§3 传输掩码)与配对帧不可确定性识别(§2)。如实不承诺:配对帧的
+残余统计结构(§2)、长度/时序元数据、解锁态设备被完全掌控、对端背叛。
+见 README_AGENT §2。
