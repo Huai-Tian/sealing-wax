@@ -504,8 +504,8 @@ static int test_padding(void)
     CHECK(swx_session_set_padding(a, 1, 300) == SWX_E_ARG);
     CHECK(swx_session_set_padding(a, 1, 4004) == SWX_E_ARG);
 
-    /* documented tradeoff: unpadded plaintext ending in 0x80 loses it,
-     * because the receiver always strips the [0x80][0x00*] marker */
+    /* a lone trailing 0x80 (no 0x00 after it) is plaintext, not a
+     * marker: the receiver must keep it (v2 marker rule) */
     CHECK(swx_session_set_padding(a, 0, 0) == SWX_OK);
     {
         const uint8_t tricky[] = { 'a', 'b', 0x80 };
@@ -513,7 +513,69 @@ static int test_padding(void)
                                     (char *) pieces, PIECE_STRIDE, MAX_PIECES,
                                     &np) == SWX_OK);
         CHECK(open_b64(b, pieces[0], out, sizeof out, &out_len) == SWX_OK);
-        CHECK(out_len == 2 && memcmp(out, "ab", 2) == 0);
+        CHECK(out_len == 3 && memcmp(out, tricky, 3) == 0);
+    }
+
+    /* v2 marker rule: "呀" = E5 91 80 ends in 0x80 and must survive,
+     * padding on or off, single- or multi-piece (owner-reported bug:
+     * it used to lose its last byte and render as U+FFFD) */
+    {
+        const uint8_t ya[] = { 0xe5, 0xa5, 0xbd, 0xe5, 0x91, 0x80 }; /* 好呀 */
+
+        /* padding off: the exact user report */
+        CHECK(swx_session_seal_text(a, ya, sizeof ya, NULL,
+                                    (char *) pieces, PIECE_STRIDE, MAX_PIECES,
+                                    &np) == SWX_OK);
+        CHECK(open_b64(b, pieces[0], out, sizeof out, &out_len) == SWX_OK);
+        CHECK(out_len == sizeof ya && memcmp(out, ya, sizeof ya) == 0);
+
+        /* padding on: the marker carries a 0x00, the strip removes
+         * only the marker */
+        CHECK(swx_session_set_padding(a, 1, 1000) == SWX_OK);
+        CHECK(swx_session_seal_text(a, ya, sizeof ya, NULL,
+                                    (char *) pieces, PIECE_STRIDE, MAX_PIECES,
+                                    &np) == SWX_OK);
+        CHECK(np == 1 && strlen(pieces[0]) == 1000);
+        CHECK(open_b64(b, pieces[0], out, sizeof out, &out_len) == SWX_OK);
+        CHECK(out_len == sizeof ya && memcmp(out, ya, sizeof ya) == 0);
+
+        /* multi-piece, padding on: the full first piece deliberately
+         * ends in a raw 0x80 (full pieces carry no marker); the last
+         * piece ends in 呀 and carries the [0x80][0x00+] marker */
+        {
+            uint8_t pt[684 + 6];
+            for (size_t i = 0; i < sizeof pt; i++) {
+                pt[i] = (uint8_t) ('A' + (i % 26));
+            }
+            pt[683] = 0x80;                    /* full piece, raw tail */
+            memcpy(pt + 684, ya, sizeof ya);   /* last piece ends in 呀 */
+            CHECK(swx_session_seal_text(a, pt, sizeof pt, NULL,
+                                        (char *) pieces, PIECE_STRIDE,
+                                        MAX_PIECES, &np) == SWX_OK);
+            CHECK(np == 2);
+            CHECK(strlen(pieces[0]) == 1000 && strlen(pieces[1]) == 1000);
+            CHECK(open_b64(b, pieces[0], out, sizeof out, &out_len)
+                  == SWX_E_PARTIAL);
+            CHECK(open_b64(b, pieces[1], out, sizeof out, &out_len) == SWX_OK);
+            CHECK(out_len == sizeof pt && memcmp(out, pt, sizeof pt) == 0);
+        }
+
+        /* room == 1 (seg = target-1): the piece goes out unpadded and
+         * its base64 still encodes to exactly the threshold */
+        {
+            uint8_t pt[683];
+            for (size_t i = 0; i < sizeof pt; i++) {
+                pt[i] = (uint8_t) (i * 11 + 1);
+            }
+            pt[682] = 0x80;
+            CHECK(swx_session_seal_text(a, pt, sizeof pt, NULL,
+                                        (char *) pieces, PIECE_STRIDE,
+                                        MAX_PIECES, &np) == SWX_OK);
+            CHECK(np == 1);
+            CHECK(strlen(pieces[0]) == 1000);
+            CHECK(open_b64(b, pieces[0], out, sizeof out, &out_len) == SWX_OK);
+            CHECK(out_len == sizeof pt && memcmp(out, pt, sizeof pt) == 0);
+        }
     }
 
     swx_session_free(a);

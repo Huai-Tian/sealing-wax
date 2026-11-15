@@ -61,15 +61,18 @@ static size_t pad_target(uint16_t threshold_b64)
     return t;
 }
 
-/* Strip [pt][0x80][0x00*] marker padding; returns len when no marker. */
+/* Strip [pt][0x80][0x00+] marker padding. At least one 0x00 must follow
+ * the 0x80: UTF-8 text never contains 0x00 bytes, while it may perfectly
+ * well END in 0x80 (e.g. "呀" = E5 91 80), so a trailing 0x80 with no
+ * zero after it is always plaintext. Returns len when no marker. */
 static size_t pad_strip(const uint8_t *pt, size_t len)
 {
-    size_t i = len;
-    while (i > 0 && pt[i - 1] == 0x00) {
-        i--;
+    size_t z = 0;
+    while (z < len && pt[len - 1 - z] == 0x00) {
+        z++;
     }
-    if (i > 0 && pt[i - 1] == 0x80) {
-        return i - 1;
+    if (z >= 1 && z < len && pt[len - 1 - z] == 0x80) {
+        return len - z - 1;
     }
     return len;
 }
@@ -519,15 +522,17 @@ int swx_session_seal_text(swx_session *s,
         uint8_t wire[SWX_MAX_FRAME_BIN];
         size_t wire_len = 0;
 
-        if (s->pad_on) {
-            /* [pt][0x80][0x00*] up to the exact piece size; a piece that
-             * is exactly full carries no marker (nothing to hide) */
+        if (s->pad_on && seg + 2 <= target) {
+            /* [pt][0x80][0x00+]: the marker always carries at least one
+             * 0x00, so plaintext legitimately ending in 0x80 (UTF-8
+             * "呀" = E5 91 80) survives the receiver's strip. A piece
+             * with room for only the lone 0x80 (or none) goes out
+             * unpadded — its base64 still encodes to exactly the
+             * threshold, so nothing leaks. */
             piece_pt = target;
             sodium_memzero(piece, piece_pt);
             memcpy(piece, pt + off, seg);
-            if (seg < piece_pt) {
-                piece[seg] = 0x80;
-            }
+            piece[seg] = 0x80;
         } else {
             piece_pt = seg;
             memcpy(piece, pt + off, seg);
