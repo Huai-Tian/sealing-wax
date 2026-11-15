@@ -62,12 +62,9 @@
     <string name="chat_dir_sent">sent by me</string>
     <string name="chat_dir_received">received by me</string>
 
-    <!-- chat: menu / length padding -->
-    <string name="menu_padding">Length padding · %1$s</string>
-    <string name="padding_on">on</string>
-    <string name="padding_off">off</string>
-    <string name="padding_desc">Short messages padded to equal length; threshold %1$d characters</string>
-    <string name="menu_threshold">Cycle threshold 500 / 1000 / 2000 / 4000</string>
+    <!-- chat: menu / length padding (one-row dropdown, 6th batch) -->
+    <string name="menu_length_padding">Length padding</string>
+    <string name="padding_off">Off</string>
 
     <!-- chat: input bar -->
     <string name="input_label">Plaintext, or paste IM ciphertext</string>

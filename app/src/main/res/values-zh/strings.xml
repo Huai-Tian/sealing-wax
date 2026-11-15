@@ -61,12 +61,9 @@
     <string name="chat_dir_sent">我发出</string>
     <string name="chat_dir_received">我收到</string>
 
-    <!-- chat: menu / length padding -->
-    <string name="menu_padding">长度混淆 · %1$s</string>
-    <string name="padding_on">开</string>
-    <string name="padding_off">关</string>
-    <string name="padding_desc">短消息等长;阈值 %1$d 字符</string>
-    <string name="menu_threshold">切换阈值 500 / 1000 / 2000 / 4000</string>
+    <!-- chat: menu / length padding (one-row dropdown, 6th batch) -->
+    <string name="menu_length_padding">长度混淆</string>
+    <string name="padding_off">关闭</string>
 
     <!-- chat: input bar -->
     <string name="input_label">明文,或粘贴 IM 密文</string>

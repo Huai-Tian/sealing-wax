@@ -29,13 +29,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AlertDialogDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -47,6 +48,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import sealing.wax.R
 
 /** 链接目标(非 UI 文案,常量即可;显示文字一律走资源)。 */
@@ -69,7 +72,9 @@ private fun openRepo(context: Context) {
 
 /** 关于 = Shizuku 同款极简弹窗(§9,其 about_dialog 布局照搬):40dp 图标 +
  *  应用名(18sp)/ 裸版本号 / 源码链接,横向排布;无标语、无许可证行;
- *  无按钮,点空白关闭(SAS 弹窗同款)。 */
+ *  点空白关闭(SAS 弹窗同款)。第六批收紧:裸 Dialog + 自适应宽度——
+ *  M3 AlertDialog 强制 280dp 最小宽 + 双层内边距(24 全包 + 24 底),
+ *  这里复刻 MaterialAlertDialogBuilder 自定义视图的"刚刚好"。 */
 @Composable
 fun AboutDialog(onDismiss: () -> Unit) {
     val context = LocalContext.current
@@ -79,16 +84,17 @@ fun AboutDialog(onDismiss: () -> Unit) {
         context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "?"
     }
 
-    AlertDialog(
+    Dialog(
         onDismissRequest = onDismiss,
-        /* M3 要求 confirmButton 必传;空槽 = 无按钮,点空白关闭 */
-        confirmButton = {},
-        text = {
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Surface(
+            shape = AlertDialogDefaults.shape,
+            color = AlertDialogDefaults.containerColor,
+        ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp),
+                modifier = Modifier.padding(24.dp),
             ) {
                 Image(icon, contentDescription = null, modifier = Modifier.size(40.dp))
                 Column(
@@ -110,8 +116,8 @@ fun AboutDialog(onDismiss: () -> Unit) {
                     )
                 }
             }
-        },
-    )
+        }
+    }
 }
 
 /** 开放源代码页(§9,独立页):仅组件与许可证清单(所有者指示,UI 优化

@@ -104,8 +104,10 @@ extern "C" {
 
 /* length-confusion padding thresholds, measured in base64 chars of a piece.
  * A threshold T maps to a plaintext target of T*3/4 - 66 bytes, so a padded
- * piece encodes to exactly T base64 characters (4000 -> 2934 = piece cap). */
-#define SWX_PAD_THRESHOLD_MIN  500
+ * piece encodes to exactly T base64 characters (4000 -> 2934 = piece cap).
+ * Presets offered by the UI (2026-11 第六批): 200/300/500/1000/3000;
+ * older saves may still carry 500..4000 (MAX unchanged) and stay valid. */
+#define SWX_PAD_THRESHOLD_MIN  200
 #define SWX_PAD_THRESHOLD_MAX  4000
 
 #ifdef __cplusplus

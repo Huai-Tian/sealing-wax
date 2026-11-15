@@ -614,10 +614,19 @@ static int test_padding(void)
         CHECK(out_len == sizeof pt);
     }
 
-    /* invalid thresholds are rejected */
+    /* invalid thresholds are rejected (MIN = 200 since 2026-11 第六批) */
     CHECK(swx_session_set_padding(a, 1, 999) == SWX_E_ARG);
-    CHECK(swx_session_set_padding(a, 1, 300) == SWX_E_ARG);
+    CHECK(swx_session_set_padding(a, 1, 196) == SWX_E_ARG);
     CHECK(swx_session_set_padding(a, 1, 4004) == SWX_E_ARG);
+
+    /* lowest preset: threshold 200 pads short messages to exactly 200 chars */
+    CHECK(swx_session_set_padding(a, 1, 200) == SWX_OK);
+    CHECK(swx_session_seal_text(a, (const uint8_t *) "hi", 2, NULL,
+                                (char *) pieces, PIECE_STRIDE, MAX_PIECES,
+                                &np) == SWX_OK);
+    CHECK(np == 1 && strlen(pieces[0]) == 200);
+    CHECK(open_b64(b, pieces[0], out, sizeof out, &out_len) == SWX_OK);
+    CHECK(out_len == 2 && memcmp(out, "hi", 2) == 0);
 
     /* a lone trailing 0x80 (no 0x00 after it) is plaintext, not a
      * marker: the receiver must keep it (v2 marker rule) */

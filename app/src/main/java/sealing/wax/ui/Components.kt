@@ -15,10 +15,13 @@ import android.graphics.Bitmap
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.core.updateTransition
+import androidx.compose.animation.core.rememberTransition
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -197,12 +200,14 @@ private val OverflowMenuItemPadding = 16.dp
 /**
  * Shizuku 溢出菜单同款比例的下拉菜单。放进包住锚点按钮的 Box 里使用
  * (锚点 = 父布局,与 DropdownMenu 相同);条目用 [OverflowMenuItem]。
+ * 选项多时自动纵向滚动。
  */
 @Composable
 fun OverflowMenu(
     expanded: Boolean,
     onDismissRequest: () -> Unit,
     modifier: Modifier = Modifier,
+    scrollState: ScrollState = rememberScrollState(),
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val expandedState = remember { MutableTransitionState(false) }
@@ -215,7 +220,7 @@ fun OverflowMenu(
             properties = PopupProperties(focusable = true),
         ) {
             /* 开合动画与 M3 DropdownMenu 同款:缩放 + 淡入,绕锚点角 */
-            val transition = updateTransition(expandedState, "OverflowMenu")
+            val transition = rememberTransition(expandedState, "OverflowMenu")
             val scale by transition.animateFloat(transitionSpec = { tween(150) }) {
                 if (it) 1f else 0.8f
             }
@@ -235,7 +240,12 @@ fun OverflowMenu(
                 shadowElevation = MenuDefaults.ShadowElevation,
             ) {
                 /* 无竖向内边距:行高 48dp 连续堆叠,同 appcompat 溢出列表 */
-                Column(Modifier.width(IntrinsicSize.Max), content = content)
+                Column(
+                    Modifier
+                        .width(IntrinsicSize.Max)
+                        .verticalScroll(scrollState),
+                    content = content,
+                )
             }
         }
     }

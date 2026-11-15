@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -43,6 +44,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Attachment
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Menu
@@ -50,15 +52,12 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -94,6 +93,12 @@ import java.io.File
 import java.text.DateFormat
 import java.util.Date
 
+/** 长度混淆阈值档位(第六批,所有者定夺):等比数列,r = 20^(1/5) ≈ 1.82,
+ *  精确命中核心区间端点 [200, 4000];单片容量 = T×3/4−66 字节,即
+ *  28 / 69 / 144 / 280 / 528 / 978 字。无默认档——开启必从列表选档,
+ *  关闭时分割 = 单片上限(非混淆,不受本表影响)。须为 4 的倍数。 */
+private val PAD_THRESHOLDS = intArrayOf(200, 364, 664, 1208, 2200, 4000)
+
 /** 对话屏:五个动作全部一键化(§5),KPI = 平文 + 1 步。 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -111,7 +116,6 @@ fun ChatScreen(
     var input by remember { mutableStateOf("") }
     var openNote by remember { mutableStateOf<String?>(null) }
     var panelOpen by remember { mutableStateOf(false) }
-    var menuOpen by remember { mutableStateOf(false) }
     var sasOpen by remember { mutableStateOf(false) }
     var saveDialog by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf<String?>(null) }
@@ -323,60 +327,70 @@ fun ChatScreen(
                             )
                         }
                     }
-                    /* 通用菜单(三横线):Box 包住按钮与菜单,锚定按钮本身
-                     * (首页三点菜单同款锚点写法,真机反馈 2026-11) */
+                    /* 通用菜单(三横线):Shizuku 溢出菜单同款几何(第六批同步);
+                     * 长度混淆 = 单行,开关与阈值合并为右侧下拉(所有者指示) */
                     Box {
+                        var menuOpen by remember { mutableStateOf(false) }
+                        var padOpen by remember { mutableStateOf(false) }
                         IconButton(onClick = { menuOpen = true }) {
                             Icon(Icons.Default.Menu, contentDescription = stringResource(R.string.chat_menu_cd))
                         }
-                        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                            DropdownMenuItem(
-                                text = {
-                                    Column {
-                                        Text(
-                                            stringResource(
-                                                R.string.menu_padding,
-                                                stringResource(
-                                                    if (SessionManager.paddingEnabled) {
-                                                        R.string.padding_on
-                                                    } else {
-                                                        R.string.padding_off
-                                                    }
-                                                ),
-                                            ),
-                                        )
-                                        Text(
-                                            stringResource(
-                                                R.string.padding_desc, SessionManager.paddingThreshold,
-                                            ),
-                                            style = MaterialTheme.typography.bodySmall,
-                                        )
-                                    }
-                                },
-                                onClick = {},
-                                trailingIcon = {
-                                    Switch(
-                                        checked = SessionManager.paddingEnabled,
-                                        onCheckedChange = { on ->
-                                            menuOpen = false
-                                            SessionManager.setPadding(on, SessionManager.paddingThreshold)
-                                        },
+                        OverflowMenu(
+                            expanded = menuOpen,
+                            onDismissRequest = {
+                                menuOpen = false
+                                padOpen = false
+                            },
+                        ) {
+                            Box {
+                                Row(
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(min = 48.dp)
+                                        .clickable { padOpen = !padOpen }
+                                        .padding(horizontal = 16.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(
+                                        stringResource(R.string.menu_length_padding),
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        modifier = Modifier.weight(1f),
                                     )
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.menu_threshold)) },
-                                onClick = {
-                                    val next = when (SessionManager.paddingThreshold) {
-                                        500 -> 1000
-                                        1000 -> 2000
-                                        2000 -> 4000
-                                        else -> 500
+                                    Text(
+                                        if (SessionManager.paddingEnabled) {
+                                            SessionManager.paddingThreshold.toString()
+                                        } else {
+                                            stringResource(R.string.padding_off)
+                                        },
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    Icon(
+                                        Icons.Default.ArrowDropDown,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                /* 嵌套下拉:关闭 + 阈值档位(第六批重定,覆盖核心
+                                 * 全区间;列表外的旧值仅不再展示,仍合法) */
+                                OverflowMenu(
+                                    expanded = padOpen,
+                                    onDismissRequest = { padOpen = false },
+                                ) {
+                                    OverflowMenuItem(stringResource(R.string.padding_off)) {
+                                        SessionManager.setPadding(false, SessionManager.paddingThreshold)
+                                        padOpen = false
+                                        menuOpen = false
                                     }
-                                    SessionManager.setPadding(true, next)
-                                    menuOpen = false
-                                },
-                            )
+                                    PAD_THRESHOLDS.forEach { t ->
+                                        OverflowMenuItem(t.toString()) {
+                                            SessionManager.setPadding(true, t)
+                                            padOpen = false
+                                            menuOpen = false
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 },
