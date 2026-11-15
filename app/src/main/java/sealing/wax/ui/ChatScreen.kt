@@ -323,58 +323,61 @@ fun ChatScreen(
                             )
                         }
                     }
-                    /* 通用菜单(三横线):后期可承载更多设置项 */
-                    IconButton(onClick = { menuOpen = true }) {
-                        Icon(Icons.Default.Menu, contentDescription = stringResource(R.string.chat_menu_cd))
-                    }
-                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                        DropdownMenuItem(
-                            text = {
-                                Column {
-                                    Text(
-                                        stringResource(
-                                            R.string.menu_padding,
+                    /* 通用菜单(三横线):Box 包住按钮与菜单,锚定按钮本身
+                     * (首页三点菜单同款锚点写法,真机反馈 2026-11) */
+                    Box {
+                        IconButton(onClick = { menuOpen = true }) {
+                            Icon(Icons.Default.Menu, contentDescription = stringResource(R.string.chat_menu_cd))
+                        }
+                        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                            DropdownMenuItem(
+                                text = {
+                                    Column {
+                                        Text(
                                             stringResource(
-                                                if (SessionManager.paddingEnabled) {
-                                                    R.string.padding_on
-                                                } else {
-                                                    R.string.padding_off
-                                                }
+                                                R.string.menu_padding,
+                                                stringResource(
+                                                    if (SessionManager.paddingEnabled) {
+                                                        R.string.padding_on
+                                                    } else {
+                                                        R.string.padding_off
+                                                    }
+                                                ),
                                             ),
-                                        ),
+                                        )
+                                        Text(
+                                            stringResource(
+                                                R.string.padding_desc, SessionManager.paddingThreshold,
+                                            ),
+                                            style = MaterialTheme.typography.bodySmall,
+                                        )
+                                    }
+                                },
+                                onClick = {},
+                                trailingIcon = {
+                                    Switch(
+                                        checked = SessionManager.paddingEnabled,
+                                        onCheckedChange = { on ->
+                                            menuOpen = false
+                                            SessionManager.setPadding(on, SessionManager.paddingThreshold)
+                                        },
                                     )
-                                    Text(
-                                        stringResource(
-                                            R.string.padding_desc, SessionManager.paddingThreshold,
-                                        ),
-                                        style = MaterialTheme.typography.bodySmall,
-                                    )
-                                }
-                            },
-                            onClick = {},
-                            trailingIcon = {
-                                Switch(
-                                    checked = SessionManager.paddingEnabled,
-                                    onCheckedChange = { on ->
-                                        menuOpen = false
-                                        SessionManager.setPadding(on, SessionManager.paddingThreshold)
-                                    },
-                                )
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.menu_threshold)) },
-                            onClick = {
-                                val next = when (SessionManager.paddingThreshold) {
-                                    500 -> 1000
-                                    1000 -> 2000
-                                    2000 -> 4000
-                                    else -> 500
-                                }
-                                SessionManager.setPadding(true, next)
-                                menuOpen = false
-                            },
-                        )
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.menu_threshold)) },
+                                onClick = {
+                                    val next = when (SessionManager.paddingThreshold) {
+                                        500 -> 1000
+                                        1000 -> 2000
+                                        2000 -> 4000
+                                        else -> 500
+                                    }
+                                    SessionManager.setPadding(true, next)
+                                    menuOpen = false
+                                },
+                            )
+                        }
                     }
                 },
             )

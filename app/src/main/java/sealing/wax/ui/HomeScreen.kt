@@ -86,12 +86,12 @@ fun HomeScreen(
     onRenameSession: (SavedSession, String) -> Unit,
     onDeleteSession: (SavedSession) -> Unit,
     onOpenSource: () -> Unit,
-    onAbout: () -> Unit,
 ) {
     val context = LocalContext.current
     var fabExpanded by remember { mutableStateOf(false) }
     var renameTarget by remember { mutableStateOf<SavedSession?>(null) }
     var deleteTarget by remember { mutableStateOf<SavedSession?>(null) }
+    var aboutOpen by remember { mutableStateOf(false) }
 
     Scaffold(
         floatingActionButton = {
@@ -128,26 +128,30 @@ fun HomeScreen(
                             .weight(1f)
                             .padding(start = 16.dp, top = 24.dp, bottom = 12.dp),
                     )
-                    var menuOpen by remember { mutableStateOf(false) }
-                    IconButton(
-                        onClick = { menuOpen = true },
-                        modifier = Modifier.padding(top = 12.dp, end = 8.dp),
-                    ) {
-                        Icon(
-                            Icons.Default.MoreVert,
-                            contentDescription = stringResource(R.string.chat_menu_cd),
-                        )
-                    }
-                    /* Shizuku 同款下拉:开放源代码在上,关于在下(§9) */
-                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.menu_open_source)) },
-                            onClick = { menuOpen = false; onOpenSource() },
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.menu_about)) },
-                            onClick = { menuOpen = false; onAbout() },
-                        )
+                    /* Box 包住 IconButton + DropdownMenu:菜单锚定按钮本身;
+                     * 曾直接放 Row 里锚到整行,真机上左展开(真机反馈 2026-11) */
+                    Box {
+                        var menuOpen by remember { mutableStateOf(false) }
+                        IconButton(
+                            onClick = { menuOpen = true },
+                            modifier = Modifier.padding(top = 12.dp, end = 8.dp),
+                        ) {
+                            Icon(
+                                Icons.Default.MoreVert,
+                                contentDescription = stringResource(R.string.chat_menu_cd),
+                            )
+                        }
+                        /* Shizuku 同款下拉:开放源代码在上,关于在下(§9) */
+                        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.menu_open_source)) },
+                                onClick = { menuOpen = false; onOpenSource() },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.menu_about)) },
+                                onClick = { menuOpen = false; aboutOpen = true },
+                            )
+                        }
                     }
                 }
                 Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -287,5 +291,10 @@ fun HomeScreen(
                 }
             },
         )
+    }
+
+    /* 关于 = Shizuku 式小弹窗(§9):无按钮,点空白关闭 */
+    if (aboutOpen) {
+        AboutDialog(onDismiss = { aboutOpen = false })
     }
 }

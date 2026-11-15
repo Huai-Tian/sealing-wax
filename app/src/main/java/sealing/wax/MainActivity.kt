@@ -40,7 +40,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import sealing.wax.store.Persistence
-import sealing.wax.ui.AboutScreen
 import sealing.wax.ui.ChatScreen
 import sealing.wax.ui.HomeScreen
 import sealing.wax.ui.JoinSessionScreen
@@ -55,7 +54,6 @@ private sealed interface Dest {
     data object NewSession : Dest
     data object JoinSession : Dest
     data object Chat : Dest
-    data object About : Dest
     data object OpenSource : Dest
 }
 
@@ -199,13 +197,7 @@ private fun App() {
                     }
                 },
                 onOpenSource = { dest = Dest.OpenSource },
-                onAbout = { dest = Dest.About },
             )
-        }
-
-        Dest.About -> {
-            BackHandler { goHome() }
-            AboutScreen(onBack = { goHome() })
         }
 
         Dest.OpenSource -> {
