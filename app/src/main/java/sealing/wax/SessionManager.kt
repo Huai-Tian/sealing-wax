@@ -140,6 +140,7 @@ object SessionManager {
         s.history.forEach { e ->
             decryptHistoryEntry(e)?.let { messages.add(it) }
         }
+        resetHistoryScratch()    /* scratch pair only lives for the entry decrypt */
     }
 
     /** Saved conversation: extend the prepaid segment when it runs low. */
@@ -316,13 +317,6 @@ object SessionManager {
             }
         }
         return null    /* incomplete stored message */
-    }
-
-    /** History view: fresh scratch pair each time, freed on next reset. */
-    fun decryptHistory(): List<UiMessage> {
-        val s = saved ?: return messages.toList()
-        resetHistoryScratch()
-        return s.history.mapNotNull { decryptHistoryEntry(it) }
     }
 
     /* ---- file channel (§7) ---- */

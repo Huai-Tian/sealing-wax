@@ -38,7 +38,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Attachment
 import androidx.compose.material.icons.filled.ContentPaste
-import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material3.AlertDialog
@@ -100,7 +99,6 @@ fun ChatScreen(
     var input by remember { mutableStateOf("") }
     var paste by remember { mutableStateOf("") }
     var openNote by remember { mutableStateOf<String?>(null) }
-    var showHistory by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
     var saveDialog by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf<String?>(null) }
@@ -241,9 +239,6 @@ fun ChatScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { showHistory = true }) {
-                        Icon(Icons.Default.History, contentDescription = "历史")
-                    }
                     IconButton(onClick = { menuOpen = true }) {
                         Icon(Icons.Default.Shield, contentDescription = "更多")
                     }
@@ -478,38 +473,6 @@ fun ChatScreen(
             },
             dismissButton = {
                 TextButton(onClick = { pendingSwx = null; swxVerdict = null }) { Text("取消") }
-            },
-        )
-    }
-
-    /* history: decrypt on the spot (§7) */
-    if (showHistory) {
-        var entries by remember { mutableStateOf<List<UiMessage>?>(null) }
-        LaunchedEffect(Unit) {
-            entries = withContext(Dispatchers.IO) { SessionManager.decryptHistory() }
-        }
-        AlertDialog(
-            onDismissRequest = { showHistory = false },
-            title = { Text("历史(当场解密,看完即丢)") },
-            text = {
-                val list = entries
-                when {
-                    list == null -> Text("解密中…")
-                    list.isEmpty() -> Text("没有历史记录")
-                    else -> Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        list.takeLast(200).reversed().forEach { m ->
-                            Text(
-                                "${if (m.dir == DIR_SENT) "我" else "对方"} · " +
-                                    DateFormat.getDateTimeInstance().format(Date(m.ts)),
-                                style = MaterialTheme.typography.labelSmall,
-                            )
-                            Text(m.text, style = MaterialTheme.typography.bodyMedium)
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showHistory = false }) { Text("关闭") }
             },
         )
     }
