@@ -39,12 +39,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.qrcode.QRCodeWriter
+import sealing.wax.R
 
 /** Big grouped SAS display: 123-456-789. */
 @Composable
@@ -82,7 +84,7 @@ fun QrCode(content: String, size: Int = 220, modifier: Modifier = Modifier) {
     ) {
         Image(
             bitmap = bitmap.asImageBitmap(),
-            contentDescription = "SAS 二维码",
+            contentDescription = stringResource(R.string.qr_sas_cd),
             modifier = Modifier.size(size.dp).padding(8.dp),
         )
     }
@@ -136,10 +138,10 @@ fun RenameSessionDialog(
     var name by remember(initialName) { mutableStateOf(initialName) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("重命名会话") },
+        title = { Text(stringResource(R.string.rename_title)) },
         text = {
             Column {
-                Text("命名的对象是会话(一把钥匙),不是联系人。")
+                Text(stringResource(R.string.rename_hint))
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
@@ -151,10 +153,10 @@ fun RenameSessionDialog(
             TextButton(onClick = {
                 if (name.isNotBlank()) onConfirm(name.trim())
                 onDismiss()
-            }) { Text("确定") }
+            }) { Text(stringResource(R.string.common_confirm)) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) }
         },
     )
 }

@@ -93,12 +93,12 @@ fun HomeScreen(
             Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (fabExpanded) {
                     ExtendedFloatingActionButton(
-                        text = { Text("加入会话") },
+                        text = { Text(stringResource(R.string.home_fab_join)) },
                         icon = { Icon(Icons.Default.Key, contentDescription = null) },
                         onClick = { fabExpanded = false; onJoinSession() },
                     )
                     ExtendedFloatingActionButton(
-                        text = { Text("新建会话") },
+                        text = { Text(stringResource(R.string.home_fab_new)) },
                         icon = { Icon(Icons.Default.Add, contentDescription = null) },
                         onClick = { fabExpanded = false; onNewSession() },
                     )
@@ -106,16 +106,16 @@ fun HomeScreen(
                 FloatingActionButton(
                     onClick = { fabExpanded = !fabExpanded },
                 ) {
-                    Icon(Icons.Default.Add, contentDescription = "新建或加入会话")
+                    Icon(Icons.Default.Add, contentDescription = stringResource(R.string.home_fab_cd))
                 }
             }
         },
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             Column(Modifier.fillMaxSize()) {
-                /* Shizuku/KernelSU 式顶栏:应用名即标题,资源自动本地化(§9) */
+                /* Shizuku/KernelSU 式顶栏:应用名即标题(app_name 随系统语言) */
                 Text(
-                    stringResource(R.string.home_title),
+                    stringResource(R.string.app_name),
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(start = 16.dp, top = 24.dp, end = 16.dp, bottom = 12.dp),
@@ -129,7 +129,7 @@ fun HomeScreen(
                         ) {
                             CircularProgressIndicator()
                             Text(
-                                "正在读取会话…",
+                                stringResource(R.string.home_loading),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -141,13 +141,12 @@ fun HomeScreen(
                             verticalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
                             Text(
-                                "会话在,但此刻读不出来。\n" +
-                                    "可能原因:系统密钥库未就绪或瞬时错误。",
+                                stringResource(R.string.home_load_failed),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.error,
                                 textAlign = TextAlign.Center,
                             )
-                            TextButton(onClick = onRetryLoad) { Text("重试") }
+                            TextButton(onClick = onRetryLoad) { Text(stringResource(R.string.common_retry)) }
                         }
 
                         is SessionListState.Ready -> {
@@ -155,8 +154,7 @@ fun HomeScreen(
                             if (sessions.isEmpty()) {
                                 /* 空态:原"已保存的会话"块的小字,移至居中(§9) */
                                 Text(
-                                    "还没有保存的会话。点右下角 + 开始。\n" +
-                                        "保存与否,每次退出对话屏时再决定。",
+                                    stringResource(R.string.home_empty),
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     textAlign = TextAlign.Center,
@@ -195,13 +193,16 @@ fun HomeScreen(
                                                 Column(Modifier.weight(1f)) {
                                                     Text(s.name, style = MaterialTheme.typography.titleMedium)
                                                     Text(
-                                                        "最近使用 " + DateFormat.getDateTimeInstance().format(Date(s.lastUsedMs)),
+                                                        stringResource(
+                                                            R.string.home_last_used,
+                                                            DateFormat.getDateTimeInstance().format(Date(s.lastUsedMs)),
+                                                        ),
                                                         style = MaterialTheme.typography.bodySmall,
                                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                     )
                                                 }
                                                 IconButton(onClick = { deleteTarget = s }) {
-                                                    Icon(Icons.Default.Delete, contentDescription = "删除")
+                                                    Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.common_delete))
                                                 }
                                             }
                                         }
@@ -239,16 +240,22 @@ fun HomeScreen(
     deleteTarget?.let { s ->
         AlertDialog(
             onDismissRequest = { deleteTarget = null },
-            title = { Text("删除会话") },
-            text = { Text("钥匙与历史同删,不可恢复。\n删除后对方发来的旧密文将永远无法解开。") },
+            title = { Text(stringResource(R.string.home_delete_title)) },
+            text = { Text(stringResource(R.string.home_delete_text)) },
             confirmButton = {
                 TextButton(onClick = {
                     onDeleteSession(s)
                     deleteTarget = null
-                    Toast.makeText(context, "已删除", Toast.LENGTH_SHORT).show()
-                }) { Text("删除") }
+                    Toast.makeText(
+                        context, context.getString(R.string.home_deleted_toast), Toast.LENGTH_SHORT,
+                    ).show()
+                }) { Text(stringResource(R.string.common_delete)) }
             },
-            dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text("取消") } },
+            dismissButton = {
+                TextButton(onClick = { deleteTarget = null }) {
+                    Text(stringResource(R.string.common_cancel))
+                }
+            },
         )
     }
 }

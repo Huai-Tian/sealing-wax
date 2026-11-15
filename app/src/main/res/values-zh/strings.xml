@@ -1,4 +1,132 @@
 <resources>
-    <!-- 中文用户的首页顶栏标题;系统按资源限定符自动解析,代码零判断 -->
-    <string name="home_title">火漆</string>
+    <!-- 中文用户资源;系统按资源限定符自动解析,代码零语言判断(§9) -->
+    <string name="app_name">火漆</string>
+
+    <!-- common -->
+    <string name="common_back">返回</string>
+    <string name="common_copy">复制</string>
+    <string name="common_cancel">取消</string>
+    <string name="common_confirm">确定</string>
+    <string name="common_retry">重试</string>
+    <string name="common_delete">删除</string>
+
+    <!-- home -->
+    <string name="home_fab_join">加入会话</string>
+    <string name="home_fab_new">新建会话</string>
+    <string name="home_fab_cd">新建或加入会话</string>
+    <string name="home_loading">正在读取会话…</string>
+    <string name="home_load_failed">会话在,但此刻读不出来。\n可能原因:系统密钥库未就绪或瞬时错误。</string>
+    <string name="home_empty">还没有保存的会话。点右下角 + 开始。\n保存与否,每次退出对话屏时再决定。</string>
+    <string name="home_last_used">最近使用 %1$s</string>
+    <string name="home_delete_title">删除会话</string>
+    <string name="home_delete_text">钥匙与历史同删,不可恢复。\n删除后对方发来的旧密文将永远无法解开。</string>
+    <string name="home_deleted_toast">已删除</string>
+
+    <!-- pairing -->
+    <string name="pair_new_title">新建会话</string>
+    <string name="pair_join_title">加入会话</string>
+    <string name="pair_secret_hint">输入一句只有你们俩知道的话(共同经历、地点、事件)。\n两人必须一字不差;不要用在网上聊过的话题——服务器存档即失效。</string>
+    <string name="pair_step1">第一步:和对方约好同一个暗号</string>
+    <string name="pair_secret_label">暗号</string>
+    <string name="pair_invite_btn">生成邀请码</string>
+    <string name="pair_invite_gen_fail">生成邀请码失败</string>
+    <string name="pair_step2">第二步:把邀请码发给对方</string>
+    <string name="pair_invite_code">邀请码</string>
+    <string name="pair_step3">第三步:粘贴对方的回复码</string>
+    <string name="pair_reply_label">回复码</string>
+    <string name="pair_complete_btn">完成配对</string>
+    <string name="pair_reply_bad_format">这不是有效的回复码(长度不符)</string>
+    <string name="pair_reply_crypto">暗号不一致或回复码被改动。和对方核对暗号后,请对方用同一个暗号重新生成回复码(邀请码不用重发)</string>
+    <string name="pair_state_error_new">配对流程状态错误</string>
+    <string name="pair_fail_new">配对失败</string>
+    <string name="pair_paste_invite">粘贴对方发来的邀请码</string>
+    <string name="pair_secret_same">暗号(和对方相同)</string>
+    <string name="pair_invite_bad_format">这不是有效的邀请码(长度不符)</string>
+    <string name="pair_invite_crypto">邀请码无法解算</string>
+    <string name="pair_state_error_join">加入流程状态错误</string>
+    <string name="pair_fail_join">加入失败</string>
+    <string name="pair_reply_btn">生成回复码</string>
+    <string name="pair_reply_code">回复码</string>
+    <string name="pair_reply_send_back">把回复码发回给对方</string>
+    <string name="pair_done_hint">对方确认后你们就在同一会话里了。\n验证码 9 位数字会一直显示在对话页右上角,想核对随时念码。</string>
+    <string name="pair_enter_chat">我已发送,进入对话</string>
+
+    <!-- chat: shell -->
+    <string name="chat_default_title">会话</string>
+    <string name="unnamed_session">未命名会话</string>
+    <string name="chat_exit_cd">退出对话</string>
+    <string name="chat_menu_cd">更多</string>
+    <string name="chat_partial_note">已收 %1$d/%2$d 片,继续粘贴其余分片…</string>
+    <string name="chat_pieces_badge"> · %1$d 片</string>
+    <string name="chat_dir_sent">我发出</string>
+    <string name="chat_dir_received">我收到</string>
+
+    <!-- chat: menu / length padding -->
+    <string name="menu_padding">长度混淆 · %1$s</string>
+    <string name="padding_on">开</string>
+    <string name="padding_off">关</string>
+    <string name="padding_desc">短消息等长;阈值 %1$d 字符</string>
+    <string name="menu_threshold">切换阈值 500 / 1000 / 2000 / 4000</string>
+
+    <!-- chat: input bar -->
+    <string name="input_label">明文,或粘贴 IM 密文</string>
+    <string name="plus_cd">发文件等入口</string>
+    <string name="seal_cd">加密并复制</string>
+    <string name="sealed_toast_one">已加密并复制,去 IM 粘贴</string>
+    <string name="sealed_toast_many">已加密 %1$d 片并全部复制,一次粘贴即可</string>
+    <string name="tile_send">发文件</string>
+    <string name="tile_receive">收文件</string>
+
+    <!-- chat: file channel -->
+    <string name="busy_encrypting">正在加密文件…</string>
+    <string name="share_chooser">分享密文文件到 IM</string>
+    <string name="busy_verifying">正在对账…</string>
+    <string name="verdict_match">✓ 就是当时那条:%1$s(%2$d B,%3$s)</string>
+    <string name="verdict_mismatch">✗ 不是当初的文件(账本中没有这个 hash)</string>
+    <string name="verdict_no_ledger">本会话没有账本记录,跳过对账</string>
+    <string name="busy_decrypting">正在解密…</string>
+    <string name="decrypted_exported">已解密导出</string>
+    <string name="swx_dialog_title">对账结果</string>
+    <string name="busy_reading_name">正在读取文件名…</string>
+    <string name="decrypt_export_btn">解密并导出</string>
+
+    <!-- chat: SAS dialog -->
+    <string name="sas_dialog_title">身份验证码</string>
+    <string name="sas_dialog_hint">电话念码、当面扫码,或点击数字复制。\n对不上 = 立即中止会话。</string>
+    <string name="sas_copied_toast">验证码已复制</string>
+
+    <!-- chat: save-or-discard -->
+    <string name="save_title">保存这个会话吗?</string>
+    <string name="save_text">不保存 = 全部清零,零状态。\n保存的代价:设备被掌控且解锁时,该会话历史可被解;换机即全丢。\n单方保存无效:对方没存,下次对方解不开。</string>
+    <string name="save_name_label">会话名称(不是联系人)</string>
+    <string name="save_btn">保存</string>
+    <string name="discard_btn">不保存</string>
+    <string name="saved_toast">已保存</string>
+
+    <!-- busy dialog -->
+    <string name="busy_please_wait">请稍候…</string>
+
+    <!-- components -->
+    <string name="qr_sas_cd">SAS 二维码</string>
+    <string name="rename_title">重命名会话</string>
+    <string name="rename_hint">命名的对象是会话(一把钥匙),不是联系人。</string>
+
+    <!-- errors (stable-code display, §9: localized prefix + SWX_E_* code;
+         internal exception details go to logs, never on screen) -->
+    <string name="err_open_failed">打开失败</string>
+    <string name="err_seal_failed">加密失败</string>
+    <string name="err_read_failed">读取失败</string>
+    <string name="err_decrypt_failed">解密失败</string>
+
+    <!-- SessionManager user-facing texts (resolved via appContext) -->
+    <string name="clipboard_empty">剪贴板里没有内容</string>
+    <string name="pieces_pending">已收分片,但消息尚未完整</string>
+    <string name="history_undecryptable">〔该条无法解密:%1$s〕</string>
+    <string name="swx_e_format">解不开:不是火漆密文,或粘错会话(需双端同版本)</string>
+    <string name="swx_e_type">消息类型不符</string>
+    <string name="swx_e_unsupported">不支持的套件,请升级 App</string>
+    <string name="swx_e_replay">这条密文之前已经收过了</string>
+    <string name="swx_e_crypto_saved">解不开:粘错会话,或对方未保存此会话(单方保存无效,请重新配对)</string>
+    <string name="swx_e_crypto_live">解不开:这不是发到本会话的密文</string>
+    <string name="swx_decrypt_failed_code">解密失败(%1$s)</string>
 </resources>

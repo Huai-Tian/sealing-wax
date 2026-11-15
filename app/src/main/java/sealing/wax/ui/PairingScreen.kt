@@ -11,6 +11,7 @@
  */
 package sealing.wax.ui
 
+import android.util.Log
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -41,20 +42,18 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import sealing.wax.R
 import sealing.wax.SessionManager
 
-/**
- * 配对两屏(§5,PAKE 化):发起方(暗号→邀请码→粘回复→直接进对话)、
- * 接收方(粘邀请→同一暗号→回复码→直接进对话)。SAS 不再有独立确认页:
- * 配对完成即进入对话屏,9 位数字常驻顶栏,随时核对(仪表盘,非关卡)。
+/** 配对两屏(§5,PAKE 化):发起方(暗号→邀请码→粘回复→直接进对话)、
+ *  接收方(粘邀请→同一暗号→回复码→直接进对话)。SAS 不再有独立确认页:
+ *  配对完成即进入对话屏,9 位数字常驻顶栏,随时核对(仪表盘,非关卡)。
  */
-
-private const val SECRET_HINT =
-    "输入一句只有你们俩知道的话(共同经历、地点、事件)。\n" +
-        "两人必须一字不差;不要用在网上聊过的话题——服务器存档即失效。"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -63,6 +62,7 @@ fun NewSessionScreen(
     onPaired: () -> Unit,
 ) {
     val clipboard = LocalClipboardManager.current
+    val context = LocalContext.current
     var secret by remember { mutableStateOf("") }
     var invite by remember { mutableStateOf<String?>(null) }
     var reply by remember { mutableStateOf("") }
@@ -71,13 +71,16 @@ fun NewSessionScreen(
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("新建会话") },
+                title = { Text(stringResource(R.string.pair_new_title)) },
                 navigationIcon = {
                     IconButton(onClick = {
                         SessionManager.abortPairing()
                         onBack()
                     }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.common_back),
+                        )
                     }
                 },
             )
@@ -94,7 +97,7 @@ fun NewSessionScreen(
         ) {
             if (invite == null) {
                 Text(
-                    "第一步:和对方约好同一个暗号",
+                    stringResource(R.string.pair_step1),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                 )
@@ -102,8 +105,8 @@ fun NewSessionScreen(
                     value = secret,
                     onValueChange = { secret = it },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("暗号") },
-                    supportingText = { Text(SECRET_HINT) },
+                    label = { Text(stringResource(R.string.pair_secret_label)) },
+                    supportingText = { Text(stringResource(R.string.pair_secret_hint)) },
                     singleLine = true,
                 )
                 Button(
@@ -111,32 +114,35 @@ fun NewSessionScreen(
                         try {
                             invite = SessionManager.startInvite(secret.toByteArray(Charsets.UTF_8))
                         } catch (e: IllegalStateException) {
-                            error = "生成邀请码失败(${e.message})"
+                            Log.w("SealingWax", "startInvite failed", e)
+                            error = SessionManager.stableError(
+                                context.getString(R.string.pair_invite_gen_fail), e,
+                            )
                         }
                     },
                     enabled = secret.isNotBlank(),
                     modifier = Modifier.fillMaxWidth(),
-                ) { Text("生成邀请码") }
+                ) { Text(stringResource(R.string.pair_invite_btn)) }
             } else {
                 Text(
-                    "第二步:把邀请码发给对方",
+                    stringResource(R.string.pair_step2),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                 )
                 CodeCard(
-                    title = "邀请码",
+                    title = stringResource(R.string.pair_invite_code),
                     code = invite ?: "",
                     action = {
                         TextButton(onClick = {
                             clipboard.setText(AnnotatedString(invite ?: ""))
                         }) {
                             Icon(Icons.Default.ContentCopy, contentDescription = null)
-                            Text("复制")
+                            Text(stringResource(R.string.common_copy))
                         }
                     },
                 )
                 Text(
-                    "第三步:粘贴对方的回复码",
+                    stringResource(R.string.pair_step3),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                 )
@@ -144,7 +150,7 @@ fun NewSessionScreen(
                     value = reply,
                     onValueChange = { reply = it },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("回复码") },
+                    label = { Text(stringResource(R.string.pair_reply_label)) },
                     singleLine = true,
                 )
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
@@ -154,19 +160,20 @@ fun NewSessionScreen(
                             SessionManager.completeInvite(reply)
                             onPaired()
                         } catch (e: IllegalStateException) {
+                            Log.w("SealingWax", "completeInvite failed", e)
                             error = when (e.message) {
-                                "SWX_E_FORMAT" -> "这不是有效的回复码(长度不符)"
-                                "SWX_E_CRYPTO" ->
-                                    "暗号不一致或回复码被改动。和对方核对暗号后," +
-                                        "请对方用同一个暗号重新生成回复码(邀请码不用重发)"
-                                "SWX_E_STATE" -> "配对流程状态错误"
-                                else -> "配对失败(${e.message})"
+                                "SWX_E_FORMAT" -> context.getString(R.string.pair_reply_bad_format)
+                                "SWX_E_CRYPTO" -> context.getString(R.string.pair_reply_crypto)
+                                "SWX_E_STATE" -> context.getString(R.string.pair_state_error_new)
+                                else -> SessionManager.stableError(
+                                    context.getString(R.string.pair_fail_new), e,
+                                )
                             }
                         }
                     },
                     enabled = reply.isNotBlank(),
                     modifier = Modifier.fillMaxWidth(),
-                ) { Text("完成配对") }
+                ) { Text(stringResource(R.string.pair_complete_btn)) }
             }
             Spacer(Modifier.height(32.dp))
         }
@@ -180,6 +187,7 @@ fun JoinSessionScreen(
     onJoined: () -> Unit,
 ) {
     val clipboard = LocalClipboardManager.current
+    val context = LocalContext.current
     var invite by remember { mutableStateOf("") }
     var secret by remember { mutableStateOf("") }
     var reply by remember { mutableStateOf<String?>(null) }
@@ -188,13 +196,16 @@ fun JoinSessionScreen(
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("加入会话") },
+                title = { Text(stringResource(R.string.pair_join_title)) },
                 navigationIcon = {
                     IconButton(onClick = {
                         SessionManager.abortPairing()
                         onBack()
                     }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.common_back),
+                        )
                     }
                 },
             )
@@ -211,7 +222,7 @@ fun JoinSessionScreen(
         ) {
             if (reply == null) {
                 Text(
-                    "粘贴对方发来的邀请码",
+                    stringResource(R.string.pair_paste_invite),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                 )
@@ -219,15 +230,15 @@ fun JoinSessionScreen(
                     value = invite,
                     onValueChange = { invite = it },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("邀请码") },
+                    label = { Text(stringResource(R.string.pair_invite_code)) },
                     singleLine = true,
                 )
                 OutlinedTextField(
                     value = secret,
                     onValueChange = { secret = it },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("暗号(和对方相同)") },
-                    supportingText = { Text(SECRET_HINT) },
+                    label = { Text(stringResource(R.string.pair_secret_same)) },
+                    supportingText = { Text(stringResource(R.string.pair_secret_hint)) },
                     singleLine = true,
                 )
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
@@ -239,43 +250,45 @@ fun JoinSessionScreen(
                                 secret.toByteArray(Charsets.UTF_8),
                             )
                         } catch (e: IllegalStateException) {
+                            Log.w("SealingWax", "startJoin failed", e)
                             error = when (e.message) {
-                                "SWX_E_FORMAT" -> "这不是有效的邀请码(长度不符)"
-                                "SWX_E_CRYPTO" -> "邀请码无法解算"
-                                "SWX_E_STATE" -> "加入流程状态错误"
-                                else -> "加入失败(${e.message})"
+                                "SWX_E_FORMAT" -> context.getString(R.string.pair_invite_bad_format)
+                                "SWX_E_CRYPTO" -> context.getString(R.string.pair_invite_crypto)
+                                "SWX_E_STATE" -> context.getString(R.string.pair_state_error_join)
+                                else -> SessionManager.stableError(
+                                    context.getString(R.string.pair_fail_join), e,
+                                )
                             }
                         }
                     },
                     enabled = invite.isNotBlank() && secret.isNotBlank(),
                     modifier = Modifier.fillMaxWidth(),
-                ) { Text("生成回复码") }
+                ) { Text(stringResource(R.string.pair_reply_btn)) }
             } else {
                 Text(
-                    "把回复码发回给对方",
+                    stringResource(R.string.pair_reply_send_back),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                 )
                 CodeCard(
-                    title = "回复码",
+                    title = stringResource(R.string.pair_reply_code),
                     code = reply ?: "",
                     action = {
                         TextButton(onClick = {
                             clipboard.setText(AnnotatedString(reply ?: ""))
                         }) {
                             Icon(Icons.Default.ContentCopy, contentDescription = null)
-                            Text("复制")
+                            Text(stringResource(R.string.common_copy))
                         }
                     },
                 )
                 Text(
-                    "对方确认后你们就在同一会话里了。\n" +
-                        "验证码 9 位数字会一直显示在对话页右上角,想核对随时念码。",
+                    stringResource(R.string.pair_done_hint),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Button(onClick = onJoined, modifier = Modifier.fillMaxWidth()) {
-                    Text("我已发送,进入对话")
+                    Text(stringResource(R.string.pair_enter_chat))
                 }
             }
             Spacer(Modifier.height(32.dp))

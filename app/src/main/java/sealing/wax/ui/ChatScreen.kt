@@ -11,9 +11,11 @@
  */
 package sealing.wax.ui
 
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.OpenableColumns
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -73,6 +75,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
@@ -82,6 +85,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import sealing.wax.FileMeta
 import sealing.wax.OpenResult
+import sealing.wax.R
 import sealing.wax.SessionManager
 import sealing.wax.SwxVerdict
 import sealing.wax.UiMessage
@@ -142,7 +146,7 @@ fun ChatScreen(
             }
             is OpenResult.Partial -> {
                 input = ""
-                openNote = "已收 ${r.got}/${r.total} 片,继续粘贴其余分片…"
+                openNote = context.getString(R.string.chat_partial_note, r.got, r.total)
             }
             /* 提示是当前内容的纯函数:普通输入(E_FORMAT)清除旧提示,
              * 不残留上一次的报错;其余错误如实显示(真机反馈 2026-11) */
@@ -157,7 +161,7 @@ fun ChatScreen(
     ) { uri ->
         if (uri != null) scope.launch {
             try {
-                busy = "正在加密文件…"
+                busy = context.getString(R.string.busy_encrypting)
                 val resolver = context.contentResolver
                 var name = "file"
                 var size = -1L
@@ -190,10 +194,17 @@ fun ChatScreen(
                     putExtra(Intent.EXTRA_STREAM, shareUri)
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
-                context.startActivity(Intent.createChooser(intent, "分享密文文件到 IM"))
+                context.startActivity(
+                    Intent.createChooser(intent, context.getString(R.string.share_chooser))
+                )
             } catch (e: Exception) {
                 busy = null
-                Toast.makeText(context, "加密失败:${e.message}", Toast.LENGTH_LONG).show()
+                Log.w("SealingWax", "seal file failed", e)
+                Toast.makeText(
+                    context,
+                    SessionManager.stableError(context.getString(R.string.err_seal_failed), e),
+                    Toast.LENGTH_LONG,
+                ).show()
             }
         }
     }
@@ -204,7 +215,7 @@ fun ChatScreen(
     ) { uri ->
         if (uri != null) scope.launch {
             try {
-                busy = "正在对账…"
+                busy = context.getString(R.string.busy_verifying)
                 val hash = withContext(Dispatchers.IO) {
                     context.contentResolver.openInputStream(uri)!!.use {
                         SessionManager.inspectSwx(it)
@@ -212,18 +223,23 @@ fun ChatScreen(
                 }
                 swxHash = hash
                 swxVerdict = when (val v = SessionManager.verdictFor(hash)) {
-                    is SwxVerdict.Matched ->
-                        "✓ 就是当时那条:${v.entry.name}(${v.entry.size} B,${dirLabel(v.entry.dir)})"
-                    SwxVerdict.Mismatch ->
-                        "✗ 不是当初的文件(账本中没有这个 hash)"
-                    SwxVerdict.NoLedger ->
-                        "本会话没有账本记录,跳过对账"
+                    is SwxVerdict.Matched -> context.getString(
+                        R.string.verdict_match, v.entry.name, v.entry.size,
+                        dirLabel(context, v.entry.dir),
+                    )
+                    SwxVerdict.Mismatch -> context.getString(R.string.verdict_mismatch)
+                    SwxVerdict.NoLedger -> context.getString(R.string.verdict_no_ledger)
                 }
                 pendingSwx = uri
                 busy = null
             } catch (e: Exception) {
                 busy = null
-                Toast.makeText(context, "读取失败:${e.message}", Toast.LENGTH_LONG).show()
+                Log.w("SealingWax", "inspect swx failed", e)
+                Toast.makeText(
+                    context,
+                    SessionManager.stableError(context.getString(R.string.err_read_failed), e),
+                    Toast.LENGTH_LONG,
+                ).show()
             }
         }
     }
@@ -236,7 +252,7 @@ fun ChatScreen(
         val hash = swxHash
         if (uri != null && src != null && hash != null) scope.launch {
             try {
-                busy = "正在解密…"
+                busy = context.getString(R.string.busy_decrypting)
                 withContext(Dispatchers.IO) {
                     context.contentResolver.openInputStream(src)!!.use { i ->
                         context.contentResolver.openOutputStream(uri)!!.use { o ->
@@ -247,10 +263,17 @@ fun ChatScreen(
                 pendingSwx = null
                 swxVerdict = null
                 busy = null
-                Toast.makeText(context, "已解密导出", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    context, context.getString(R.string.decrypted_exported), Toast.LENGTH_SHORT,
+                ).show()
             } catch (e: Exception) {
                 busy = null
-                Toast.makeText(context, "解密失败:${e.message}", Toast.LENGTH_LONG).show()
+                Log.w("SealingWax", "decrypt swx failed", e)
+                Toast.makeText(
+                    context,
+                    SessionManager.stableError(context.getString(R.string.err_decrypt_failed), e),
+                    Toast.LENGTH_LONG,
+                ).show()
             }
         }
     }
@@ -283,7 +306,10 @@ fun ChatScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = { doExit() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "退出对话")
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.chat_exit_cd),
+                        )
                     }
                 },
                 actions = {
@@ -299,18 +325,28 @@ fun ChatScreen(
                     }
                     /* 通用菜单(三横线):后期可承载更多设置项 */
                     IconButton(onClick = { menuOpen = true }) {
-                        Icon(Icons.Default.Menu, contentDescription = "更多")
+                        Icon(Icons.Default.Menu, contentDescription = stringResource(R.string.chat_menu_cd))
                     }
                     DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                         DropdownMenuItem(
                             text = {
                                 Column {
                                     Text(
-                                        "长度混淆 · " +
-                                            if (SessionManager.paddingEnabled) "开" else "关",
+                                        stringResource(
+                                            R.string.menu_padding,
+                                            stringResource(
+                                                if (SessionManager.paddingEnabled) {
+                                                    R.string.padding_on
+                                                } else {
+                                                    R.string.padding_off
+                                                }
+                                            ),
+                                        ),
                                     )
                                     Text(
-                                        "短消息等长;阈值 ${SessionManager.paddingThreshold} 字符",
+                                        stringResource(
+                                            R.string.padding_desc, SessionManager.paddingThreshold,
+                                        ),
                                         style = MaterialTheme.typography.bodySmall,
                                     )
                                 }
@@ -327,7 +363,7 @@ fun ChatScreen(
                             },
                         )
                         DropdownMenuItem(
-                            text = { Text("切换阈值 500 / 1000 / 2000 / 4000") },
+                            text = { Text(stringResource(R.string.menu_threshold)) },
                             onClick = {
                                 val next = when (SessionManager.paddingThreshold) {
                                     500 -> 1000
@@ -380,7 +416,7 @@ fun ChatScreen(
                             value = input,
                             onValueChange = { input = it },
                             modifier = Modifier.weight(0.8f),
-                            label = { Text("明文,或粘贴 IM 密文") },
+                            label = { Text(stringResource(R.string.input_label)) },
                             minLines = 1,
                             maxLines = 5,
                         )
@@ -394,7 +430,7 @@ fun ChatScreen(
                                 modifier = Modifier.weight(0.2f),
                                 contentPadding = PaddingValues(0.dp),
                             ) {
-                                Icon(Icons.Default.Add, contentDescription = "发文件等入口")
+                                Icon(Icons.Default.Add, contentDescription = stringResource(R.string.plus_cd))
                             }
                         } else {
                             Button(
@@ -405,8 +441,11 @@ fun ChatScreen(
                                     panelOpen = false
                                     Toast.makeText(
                                         context,
-                                        if (pieces.size == 1) "已加密并复制,去 IM 粘贴"
-                                        else "已加密 ${pieces.size} 片并全部复制,一次粘贴即可",
+                                        if (pieces.size == 1) {
+                                            context.getString(R.string.sealed_toast_one)
+                                        } else {
+                                            context.getString(R.string.sealed_toast_many, pieces.size)
+                                        },
                                         Toast.LENGTH_SHORT,
                                     ).show()
                                 },
@@ -415,7 +454,7 @@ fun ChatScreen(
                             ) {
                                 Icon(
                                     Icons.AutoMirrored.Filled.Send,
-                                    contentDescription = "加密并复制",
+                                    contentDescription = stringResource(R.string.seal_cd),
                                 )
                             }
                         }
@@ -432,7 +471,7 @@ fun ChatScreen(
                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             PanelTile(
                                 icon = { Icon(Icons.Default.Attachment, contentDescription = null) },
-                                label = "发文件",
+                                label = stringResource(R.string.tile_send),
                                 onClick = {
                                     panelOpen = false
                                     pickSource.launch(arrayOf("*/*"))
@@ -440,7 +479,7 @@ fun ChatScreen(
                             )
                             PanelTile(
                                 icon = { Icon(Icons.Default.Lock, contentDescription = null) },
-                                label = "收文件",
+                                label = stringResource(R.string.tile_receive),
                                 onClick = {
                                     panelOpen = false
                                     pickSwx.launch(arrayOf("*/*"))
@@ -467,7 +506,7 @@ fun ChatScreen(
     if (sasOpen && sas != null) {
         AlertDialog(
             onDismissRequest = { sasOpen = false },
-            title = { Text("身份验证码") },
+            title = { Text(stringResource(R.string.sas_dialog_title)) },
             text = {
                 Column(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -475,7 +514,7 @@ fun ChatScreen(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(
-                        "电话念码、当面扫码,或点击数字复制。\n对不上 = 立即中止会话。",
+                        stringResource(R.string.sas_dialog_hint),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error,
                     )
@@ -483,7 +522,11 @@ fun ChatScreen(
                         sas,
                         Modifier.clickable {
                             clipboard.setText(AnnotatedString(sas))
-                            Toast.makeText(context, "验证码已复制", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(
+                                context,
+                                context.getString(R.string.sas_copied_toast),
+                                Toast.LENGTH_SHORT,
+                            ).show()
                         },
                     )
                     QrCode(content = sas)
@@ -499,18 +542,14 @@ fun ChatScreen(
         var name by remember { mutableStateOf("") }
         AlertDialog(
             onDismissRequest = { saveDialog = false },
-            title = { Text("保存这个会话吗?") },
+            title = { Text(stringResource(R.string.save_title)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        "不保存 = 全部清零,零状态。\n" +
-                            "保存的代价:设备被掌控且解锁时,该会话历史可被解;换机即全丢。\n" +
-                            "单方保存无效:对方没存,下次对方解不开。"
-                    )
+                    Text(stringResource(R.string.save_text))
                     OutlinedTextField(
                         value = name,
                         onValueChange = { name = it },
-                        label = { Text("会话名称(不是联系人)") },
+                        label = { Text(stringResource(R.string.save_name_label)) },
                         singleLine = true,
                     )
                 }
@@ -518,20 +557,24 @@ fun ChatScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        SessionManager.saveLiveAs(name.ifBlank { "未命名会话" }, context)
+                        SessionManager.saveLiveAs(
+                            name.ifBlank { context.getString(R.string.unnamed_session) }, context,
+                        )
                         SessionManager.exitConversation(context)
                         saveDialog = false
-                        Toast.makeText(context, "已保存", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(
+                            context, context.getString(R.string.saved_toast), Toast.LENGTH_SHORT,
+                        ).show()
                         onExit()
                     },
-                ) { Text("保存") }
+                ) { Text(stringResource(R.string.save_btn)) }
             },
             dismissButton = {
                 TextButton(onClick = {
                     SessionManager.exitConversation(context)
                     saveDialog = false
                     onExit()
-                }) { Text("不保存") }
+                }) { Text(stringResource(R.string.discard_btn)) }
             },
         )
     }
@@ -540,14 +583,14 @@ fun ChatScreen(
     if (pendingSwx != null) {
         AlertDialog(
             onDismissRequest = { pendingSwx = null; swxVerdict = null },
-            title = { Text("对账结果") },
+            title = { Text(stringResource(R.string.swx_dialog_title)) },
             text = { Text(swxVerdict ?: "…") },
             confirmButton = {
                 TextButton(onClick = {
                     val src = pendingSwx
                     if (src != null) scope.launch {
                         try {
-                            busy = "正在读取文件名…"
+                            busy = context.getString(R.string.busy_reading_name)
                             val meta = withContext(Dispatchers.IO) {
                                 context.contentResolver.openInputStream(src)!!.use {
                                     SessionManager.peekSwxMeta(it)
@@ -557,13 +600,22 @@ fun ChatScreen(
                             pickTarget.launch(meta.name)
                         } catch (e: Exception) {
                             busy = null
-                            Toast.makeText(context, "读取失败:${e.message}", Toast.LENGTH_LONG).show()
+                            Log.w("SealingWax", "peek swx meta failed", e)
+                            Toast.makeText(
+                                context,
+                                SessionManager.stableError(
+                                    context.getString(R.string.err_read_failed), e,
+                                ),
+                                Toast.LENGTH_LONG,
+                            ).show()
                         }
                     }
-                }) { Text("解密并导出") }
+                }) { Text(stringResource(R.string.decrypt_export_btn)) }
             },
             dismissButton = {
-                TextButton(onClick = { pendingSwx = null; swxVerdict = null }) { Text("取消") }
+                TextButton(onClick = { pendingSwx = null; swxVerdict = null }) {
+                    Text(stringResource(R.string.common_cancel))
+                }
             },
         )
     }
@@ -572,7 +624,7 @@ fun ChatScreen(
         AlertDialog(
             onDismissRequest = {},
             title = { Text(b) },
-            text = { Text("请稍候…") },
+            text = { Text(stringResource(R.string.busy_please_wait)) },
             confirmButton = {},
         )
     }
@@ -596,7 +648,9 @@ private fun MessageBubble(m: UiMessage) {
                 Text(m.text, style = MaterialTheme.typography.bodyMedium)
                 Text(
                     DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(m.ts)) +
-                        if (m.pieces.size > 1) " · ${m.pieces.size} 片" else "",
+                        if (m.pieces.size > 1) {
+                            stringResource(R.string.chat_pieces_badge, m.pieces.size)
+                        } else "",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -605,7 +659,8 @@ private fun MessageBubble(m: UiMessage) {
     }
 }
 
-private fun dirLabel(dir: Int): String = if (dir == DIR_SENT) "我发出" else "我收到"
+private fun dirLabel(context: Context, dir: Int): String =
+    context.getString(if (dir == DIR_SENT) R.string.chat_dir_sent else R.string.chat_dir_received)
 
 /** "+"面板入口磁贴(微信式):方形图标 + 标签;未来特殊消息加格即可。 */
 @Composable

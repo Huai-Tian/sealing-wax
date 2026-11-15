@@ -69,6 +69,14 @@ object SessionManager {
 
     private fun ctx(): Context = appContext ?: error("SessionManager not attached")
 
+    /** 双语铁律(§9):非组合层的用户可见文案统一从资源解析。 */
+    private fun str(id: Int, vararg args: Any): String = ctx().getString(id, *args)
+
+    /** 稳定错误码上屏(§9):SWX_E_* 代码随本地化前缀附出;其余异常
+     *  只出前缀,细节进日志,绝不上屏。 */
+    fun stableError(prefix: String, e: Throwable): String =
+        e.message?.takeIf { it.startsWith("SWX_E_") }?.let { "$prefix($it)" } ?: prefix
+
     /** Live conversation handle; 0 = no conversation. */
     var handle: Long = 0
         private set
@@ -280,7 +288,7 @@ object SessionManager {
     fun openPasted(text: String): OpenResult {
         require(handle != 0L) { "没有活跃会话" }
         val tokens = text.split(Regex("\\s+")).filter { it.isNotEmpty() }
-        if (tokens.isEmpty()) return OpenResult.Failure("剪贴板里没有内容")
+        if (tokens.isEmpty()) return OpenResult.Failure(str(R.string.clipboard_empty))
         for (t in tokens) {
             val pt = try {
                 WaxNative.openText(handle, t)
@@ -306,7 +314,7 @@ object SessionManager {
         return if (lf != null && lf[2] > 1) {
             OpenResult.Partial((lf[1] + 1).toInt(), lf[2].toInt())
         } else {
-            OpenResult.Failure("已收分片,但消息尚未完整")
+            OpenResult.Failure(str(R.string.pieces_pending))
         }
     }
 
@@ -339,7 +347,11 @@ object SessionManager {
             val pt = try {
                 WaxNative.openText(target, p)
             } catch (err: IllegalStateException) {
-                return UiMessage(e.dir, "〔该条无法解密:${err.message}〕", e.ts, emptyList())
+                return UiMessage(
+                    e.dir,
+                    str(R.string.history_undecryptable, friendlyError(err.message, true)),
+                    e.ts, emptyList(),
+                )
             }
             if (pt != null) {
                 return UiMessage(e.dir, String(pt, Charsets.UTF_8), e.ts, e.pieces)
@@ -548,16 +560,13 @@ object SessionManager {
     }
 
     private fun friendlyError(code: String?, isSaved: Boolean): String = when (code) {
-        "SWX_E_FORMAT" -> "解不开:不是火漆密文,或粘错会话(需双端同版本)"
-        "SWX_E_TYPE" -> "消息类型不符"
-        "SWX_E_UNSUPPORTED" -> "不支持的套件,请升级 App"
-        "SWX_E_REPLAY" -> "这条密文之前已经收过了"
-        "SWX_E_CRYPTO" -> if (isSaved) {
-            "解不开:粘错会话,或对方未保存此会话(单方保存无效,请重新配对)"
-        } else {
-            "解不开:这不是发到本会话的密文"
-        }
-        else -> "解密失败($code)"
+        "SWX_E_FORMAT" -> str(R.string.swx_e_format)
+        "SWX_E_TYPE" -> str(R.string.swx_e_type)
+        "SWX_E_UNSUPPORTED" -> str(R.string.swx_e_unsupported)
+        "SWX_E_REPLAY" -> str(R.string.swx_e_replay)
+        "SWX_E_CRYPTO" -> if (isSaved) str(R.string.swx_e_crypto_saved)
+        else str(R.string.swx_e_crypto_live)
+        else -> str(R.string.swx_decrypt_failed_code, code ?: "unknown")
     }
 }
 

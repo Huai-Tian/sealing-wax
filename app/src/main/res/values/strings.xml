@@ -1,5 +1,133 @@
 <resources>
-    <string name="app_name">火漆</string>
-    <!-- 首页顶栏标题(Shizuku 式应用名;默认资源 = 英文用户) -->
-    <string name="home_title">Sealing Wax</string>
+    <!-- 双语铁律(§9):默认资源 = 英文,兜底所有语言;values-zh = 中文 -->
+    <!-- Launcher label doubles as the home top title (Shizuku-style). -->
+    <string name="app_name">Sealing Wax</string>
+
+    <!-- common -->
+    <string name="common_back">Back</string>
+    <string name="common_copy">Copy</string>
+    <string name="common_cancel">Cancel</string>
+    <string name="common_confirm">OK</string>
+    <string name="common_retry">Retry</string>
+    <string name="common_delete">Delete</string>
+
+    <!-- home -->
+    <string name="home_fab_join">Join session</string>
+    <string name="home_fab_new">New session</string>
+    <string name="home_fab_cd">New or join a session</string>
+    <string name="home_loading">Reading sessions…</string>
+    <string name="home_load_failed">Sessions exist, but can\'t be read right now.\nPossible cause: system keystore not ready, or a transient error.</string>
+    <string name="home_empty">No saved sessions yet. Tap + in the bottom-right corner to start.\nWhether to save is decided each time you leave the chat.</string>
+    <string name="home_last_used">Last used %1$s</string>
+    <string name="home_delete_title">Delete session</string>
+    <string name="home_delete_text">Key and history are deleted together; this cannot be undone.\nAfter deletion, old ciphertext the peer sends can never be opened again.</string>
+    <string name="home_deleted_toast">Deleted</string>
+
+    <!-- pairing -->
+    <string name="pair_new_title">New session</string>
+    <string name="pair_join_title">Join session</string>
+    <string name="pair_secret_hint">Type something only the two of you know (a shared experience, place, event).\nBoth must match exactly; never use a topic you\'ve discussed online — server archives would break it.</string>
+    <string name="pair_step1">Step 1: agree on a passphrase with the other side</string>
+    <string name="pair_secret_label">Passphrase</string>
+    <string name="pair_invite_btn">Generate invite code</string>
+    <string name="pair_invite_gen_fail">Failed to generate invite code</string>
+    <string name="pair_step2">Step 2: send the invite code to the other side</string>
+    <string name="pair_invite_code">Invite code</string>
+    <string name="pair_step3">Step 3: paste the other side\'s reply code</string>
+    <string name="pair_reply_label">Reply code</string>
+    <string name="pair_complete_btn">Finish pairing</string>
+    <string name="pair_reply_bad_format">Not a valid reply code (wrong length)</string>
+    <string name="pair_reply_crypto">Passphrase mismatch, or the reply code was altered. Check the passphrase with the other side, then have them regenerate the reply code with the same passphrase (the invite code needn\'t be resent)</string>
+    <string name="pair_state_error_new">Pairing state error</string>
+    <string name="pair_fail_new">Pairing failed</string>
+    <string name="pair_paste_invite">Paste the invite code the other side sent</string>
+    <string name="pair_secret_same">Passphrase (same as theirs)</string>
+    <string name="pair_invite_bad_format">Not a valid invite code (wrong length)</string>
+    <string name="pair_invite_crypto">The invite code cannot be solved</string>
+    <string name="pair_state_error_join">Join state error</string>
+    <string name="pair_fail_join">Join failed</string>
+    <string name="pair_reply_btn">Generate reply code</string>
+    <string name="pair_reply_code">Reply code</string>
+    <string name="pair_reply_send_back">Send the reply code back to them</string>
+    <string name="pair_done_hint">Once they confirm, you\'re both in the same session.\nThe 9-digit verification number stays at the top of the chat screen — read it out anytime to verify.</string>
+    <string name="pair_enter_chat">Sent — enter the chat</string>
+
+    <!-- chat: shell -->
+    <string name="chat_default_title">Session</string>
+    <string name="unnamed_session">Unnamed session</string>
+    <string name="chat_exit_cd">Leave conversation</string>
+    <string name="chat_menu_cd">More</string>
+    <string name="chat_partial_note">Got %1$d/%2$d pieces — keep pasting the rest…</string>
+    <string name="chat_pieces_badge"> · %1$d pieces</string>
+    <string name="chat_dir_sent">sent by me</string>
+    <string name="chat_dir_received">received by me</string>
+
+    <!-- chat: menu / length padding -->
+    <string name="menu_padding">Length padding · %1$s</string>
+    <string name="padding_on">on</string>
+    <string name="padding_off">off</string>
+    <string name="padding_desc">Short messages padded to equal length; threshold %1$d characters</string>
+    <string name="menu_threshold">Cycle threshold 500 / 1000 / 2000 / 4000</string>
+
+    <!-- chat: input bar -->
+    <string name="input_label">Plaintext, or paste IM ciphertext</string>
+    <string name="plus_cd">Send file and more</string>
+    <string name="seal_cd">Encrypt and copy</string>
+    <string name="sealed_toast_one">Encrypted and copied — paste it in your IM</string>
+    <string name="sealed_toast_many">Encrypted into %1$d pieces, all copied — one paste is enough</string>
+    <string name="tile_send">Send file</string>
+    <string name="tile_receive">Receive file</string>
+
+    <!-- chat: file channel -->
+    <string name="busy_encrypting">Encrypting file…</string>
+    <string name="share_chooser">Share the sealed file to IM</string>
+    <string name="busy_verifying">Checking against ledger…</string>
+    <string name="verdict_match">✓ This is the original: %1$s (%2$d B, %3$s)</string>
+    <string name="verdict_mismatch">✗ Not the original file (hash not in the ledger)</string>
+    <string name="verdict_no_ledger">No ledger records for this session, check skipped</string>
+    <string name="busy_decrypting">Decrypting…</string>
+    <string name="decrypted_exported">Decrypted and exported</string>
+    <string name="swx_dialog_title">Ledger check</string>
+    <string name="busy_reading_name">Reading file name…</string>
+    <string name="decrypt_export_btn">Decrypt and export</string>
+
+    <!-- chat: SAS dialog -->
+    <string name="sas_dialog_title">Verification number</string>
+    <string name="sas_dialog_hint">Read it over a call, scan in person, or tap the digits to copy.\nIf they don\'t match, stop the session immediately.</string>
+    <string name="sas_copied_toast">Verification number copied</string>
+
+    <!-- chat: save-or-discard -->
+    <string name="save_title">Save this session?</string>
+    <string name="save_text">Not saving = everything is wiped; zero state.\nThe cost of saving: if this device is seized while unlocked, this session\'s history can be opened; switching devices loses it.\nSaving on one side only is void: if they didn\'t save, they can\'t open future messages.</string>
+    <string name="save_name_label">Session name (not a contact)</string>
+    <string name="save_btn">Save</string>
+    <string name="discard_btn">Don\'t save</string>
+    <string name="saved_toast">Saved</string>
+
+    <!-- busy dialog -->
+    <string name="busy_please_wait">Please wait…</string>
+
+    <!-- components -->
+    <string name="qr_sas_cd">SAS QR code</string>
+    <string name="rename_title">Rename session</string>
+    <string name="rename_hint">You\'re naming a session (a key), not a contact.</string>
+
+    <!-- errors (stable-code display, §9: localized prefix + SWX_E_* code;
+         internal exception details go to logs, never on screen) -->
+    <string name="err_open_failed">Open failed</string>
+    <string name="err_seal_failed">Encryption failed</string>
+    <string name="err_read_failed">Read failed</string>
+    <string name="err_decrypt_failed">Decryption failed</string>
+
+    <!-- SessionManager user-facing texts (resolved via appContext) -->
+    <string name="clipboard_empty">Clipboard is empty</string>
+    <string name="pieces_pending">Pieces received, but the message isn\'t complete yet</string>
+    <string name="history_undecryptable">〔This entry can\'t be decrypted: %1$s〕</string>
+    <string name="swx_e_format">Can\'t open it: not Sealing Wax ciphertext, or pasted into the wrong session (both ends must run the same version)</string>
+    <string name="swx_e_type">Message type mismatch</string>
+    <string name="swx_e_unsupported">Unsupported suite — please upgrade the app</string>
+    <string name="swx_e_replay">This ciphertext has already been received</string>
+    <string name="swx_e_crypto_saved">Can\'t open it: pasted into the wrong session, or the other side didn\'t save this session (one-sided saving is void — please pair again)</string>
+    <string name="swx_e_crypto_live">Can\'t open it: this ciphertext wasn\'t sent to this session</string>
+    <string name="swx_decrypt_failed_code">Decryption failed (%1$s)</string>
 </resources>

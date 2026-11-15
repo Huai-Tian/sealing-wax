@@ -13,6 +13,7 @@ package sealing.wax
 
 import android.app.Activity
 import android.os.Bundle
+import android.util.Log
 import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -93,7 +94,7 @@ private fun App() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var dest by remember { mutableStateOf<Dest>(Dest.Home) }
-    var chatTitle by remember { mutableStateOf("会话") }
+    var chatTitle by remember { mutableStateOf(context.getString(R.string.chat_default_title)) }
     var chatSaved by remember { mutableStateOf(false) }
     var listState by remember { mutableStateOf<SessionListState>(SessionListState.Loading) }
 
@@ -156,13 +157,19 @@ private fun App() {
                     scope.launch {
                         runCatching { SessionManager.openSaved(context, id) }
                             .onSuccess {
-                                chatTitle = SessionManager.saved?.name ?: "会话"
+                                chatTitle = SessionManager.saved?.name
+                                    ?: context.getString(R.string.chat_default_title)
                                 chatSaved = true
                                 dest = Dest.Chat
                             }
                             .onFailure {
+                                Log.w("SealingWax", "openSaved failed", it)
                                 Toast.makeText(
-                                    context, "打开失败:${it.message}", Toast.LENGTH_LONG,
+                                    context,
+                                    SessionManager.stableError(
+                                        context.getString(R.string.err_open_failed), it,
+                                    ),
+                                    Toast.LENGTH_LONG,
                                 ).show()
                             }
                     }
@@ -201,7 +208,7 @@ private fun App() {
                     /* PAKE finished and the confirm verified: straight to chat;
                      * SAS rides the top bar (§5: 无确认页) */
                     SessionManager.beginConversation()
-                    chatTitle = "未命名会话"
+                    chatTitle = context.getString(R.string.unnamed_session)
                     chatSaved = false
                     dest = Dest.Chat
                 },
@@ -217,7 +224,7 @@ private fun App() {
                 onBack = { goHome() },
                 onJoined = {
                     SessionManager.beginConversation()
-                    chatTitle = "未命名会话"
+                    chatTitle = context.getString(R.string.unnamed_session)
                     chatSaved = false
                     dest = Dest.Chat
                 },
