@@ -42,7 +42,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Attachment
-import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.AlertDialog
@@ -463,7 +462,8 @@ fun ChatScreen(
         )
     }
 
-    /* SAS 放大核对(§9 仪表盘的放大卡片:大字+二维码+复制) */
+    /* SAS 放大核对(§9:大号数字点击即复制,二维码扫码;无按钮,
+     * 点空白关闭——DismissRequest) */
     if (sasOpen && sas != null) {
         AlertDialog(
             onDismissRequest = { sasOpen = false },
@@ -475,23 +475,22 @@ fun ChatScreen(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(
-                        "电话念码或当面扫码。对不上 = 立即中止会话。",
+                        "电话念码、当面扫码,或点击数字复制。\n对不上 = 立即中止会话。",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error,
                     )
-                    SasDigits(sas)
+                    SasDigits(
+                        sas,
+                        Modifier.clickable {
+                            clipboard.setText(AnnotatedString(sas))
+                            Toast.makeText(context, "验证码已复制", Toast.LENGTH_SHORT).show()
+                        },
+                    )
                     QrCode(content = sas)
-                    TextButton(onClick = {
-                        clipboard.setText(AnnotatedString(sas))
-                    }) {
-                        Icon(Icons.Default.ContentCopy, contentDescription = null)
-                        Text("复制验证码")
-                    }
                 }
             },
-            confirmButton = {
-                TextButton(onClick = { sasOpen = false }) { Text("关闭") }
-            },
+            /* M3 要求 confirmButton 必传;空槽 = 无按钮,点空白关闭 */
+            confirmButton = {},
         )
     }
 
