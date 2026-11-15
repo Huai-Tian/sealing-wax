@@ -36,7 +36,7 @@ planned_stack:
   randomness: "仅操作系统 CSPRNG"
   sas: "HKDF(prk,'sas') 拒绝采样 → 均匀 9 位数字(3-3-3 分组)"
   transport_mask: "数据帧固定头 38B([0,14)∪[26,50)) XOR HKDF(session_key,'mask'‖nonce);握手帧不掩(既定交换)"
-target_platforms_v1: ["Android(原生核心 host 可测)"]   # 桌面/iOS 复用同一 C 核心
+target_platforms_v1: ["Android(原生核心 host 可测)"]   # 单平台承诺;C 核心保持可移植(host 测试强制)
 group_chat_v1: false                              # 远期评估 MLS/RFC 9420
 ```
 
@@ -306,7 +306,8 @@ A 完成:    粘贴回复码 → 双方同屏显示 SAS → 带外核对(念码/
 - CI(GitHub Actions):host CTest 全量 + 云端 assembleDebug 出 APK——维护者
   免装本地 Android 工具链即可拿包
 - 全源码 AGPL 头部署名(验收 6)
-- 桌面/iOS 为后续平台,直接复用同一 C 核心
+- C 核心保持平台无关(host 全量测试强制此纪律,零成本);新平台仅在
+  双前提成立时评估(§12)——能力保留,承诺不轻许
 
 ## 11. v1 验收标准
 
@@ -325,19 +326,20 @@ A 完成:    粘贴回复码 → 双方同屏显示 SAS → 带外核对(念码/
 ## 12. 路线
 
 ```
-阶段 1(v1): Android App(Compose UI + 原生核心,核心 host 全量测试) ← 从这里开始
-阶段 2:     桌面 CLI/GUI(复用 C 核心,加 main 即可)
-阶段 3:     iOS(复用 C 核心)
+当前(v1):   Android App(Compose UI + 原生核心,核心 host 全量测试)
+平台承诺:   v1 之后无。任何新平台须双前提同时成立才评估:
+            ① 出现真实的对端需求;② 分发路径走通
+已否决(2026-11 所有者决策,论证见 §15):
+            桌面 CLI/GUI、iOS
 远期:       群聊(MLS/RFC 9420)——明确不做
 ```
 
 ## 13. 命名与生态占位(已核查,2026-11)
 
 ```yaml
-repo: sealing-wax            # GitHub/npm/crates/PyPI 均已核查空闲
+repo: sealing-wax            # GitHub 已核查空闲(单平台,无 CLI 发布计划)
 display: "火漆 · Sealing Wax"
 file_extension: ".swx"
-cli_candidates: ["waxletter", "swx"]   # 动手前各跑一遍撞名核查
 domains_available: ["sealingwax.io", "sealingwax.dev"]  # 建议尽快注册
 trademark_note: "发布前做类别 9/42 商标检索;英文表述永远用'两端平等·默认零状态'"
 ```
@@ -374,6 +376,15 @@ trademark_note: "发布前做类别 9/42 商标检索;英文表述永远用'两�
 
 ### 2.0-draft 之后(实现期变更)
 
+- **2026-11 路线收敛为 Android 单平台**(所有者决策): 撤销桌面 CLI/GUI 与
+  iOS 阶段承诺,改为双前提条件评估(真实对端需求 + 分发路径走通)。否决
+  论证——桌面: 用户有成熟 E2E 替代品,火漆在该形态无差异化("跑在你本来
+  就在用的手机 IM 上"才是格子);CLI 工作流违反唯一 KPI;桌面无
+  Keystore/FLAG_SECURE 对等物,威胁模型反而恶化。iOS: 不上架≈无法安装
+  (免费自签 7 天过期;Ad Hoc 需登记对端 UDID;企业签名灰色);中国区上架
+  需 ICP 备案(域名+托管主体),与无服务器边界直接冲突;其他区可行但对端
+  需外区 Apple ID。C 核心平台无关纪律保留(host 测试强制)——删除的是
+  承诺,不是能力
 - **2026-11 填充标记加固 v2**(真机反馈"呀"显示为 U+FFFD):"呀"=E5 91 80,
   旧规则"尾部 0x80 即剥"吃掉真实明文字节。标记改为 [0x80][0x00⁺]——UTF-8
   文本不含 0x00,无 0x00 尾随的 0x80 永远是明文本体;收方仅在尾部 ≥1 个
