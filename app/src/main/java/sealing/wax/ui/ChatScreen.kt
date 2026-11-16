@@ -76,6 +76,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import kotlinx.coroutines.Dispatchers
@@ -556,12 +557,15 @@ fun ChatScreen(
                         },
                     )
                     QrCode(content = sas)
-                    /* 红字提示在二维码下方(第十批):标准+违约后果一句收束,
-                     * 核对方法与点击复制说明撤除(点击行为保留,Toast 反馈) */
+                    /* 红字提示在二维码下方(第十批):标准+违约后果;
+                     * 收尾:拆两行逐行居中(第一行较长,textAlign 保证
+                     * 第二行不随块左对齐)、句号改叹号。核对方法与点击复制
+                     * 说明撤除(点击行为保留,Toast 反馈) */
                     Text(
                         stringResource(R.string.sas_dialog_hint),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error,
+                        textAlign = TextAlign.Center,
                     )
                 }
             },

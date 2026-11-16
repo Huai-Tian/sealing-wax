@@ -90,7 +90,7 @@
 
     <!-- chat: SAS dialog -->
     <string name="sas_dialog_title">身份验证码</string>
-    <string name="sas_dialog_hint">两端的 9 位数字应完全一致,对不上则存在中间人监听。</string>
+    <string name="sas_dialog_hint">双方身份验证码应完全一致\n对不上则存在中间人监听!</string>
     <string name="sas_copied_toast">验证码已复制</string>
 
     <!-- chat: save-or-discard -->

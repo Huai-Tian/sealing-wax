@@ -93,7 +93,7 @@
 
     <!-- chat: SAS dialog -->
     <string name="sas_dialog_title">Verification number</string>
-    <string name="sas_dialog_hint">Both ends must show the same 9 digits; a mismatch means someone is listening in.</string>
+    <string name="sas_dialog_hint">Both ends must show the same verification number.\nA mismatch means someone is listening in!</string>
     <string name="sas_copied_toast">Verification number copied</string>
 
     <!-- chat: save-or-discard -->
