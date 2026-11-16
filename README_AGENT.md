@@ -448,6 +448,18 @@ trademark_note: "发布前做类别 9/42 商标检索;英文表述永远用'两�
 
 ### 2.0-draft 之后(实现期变更)
 
+- **2026-11 发起方配对重试 BUG 修复**(真机反馈,协议层):复现——B 先用
+  错暗号回复,A finish 报暗号不一致;B 复用同一邀请码 + 正确暗号重发,
+  A 再 finish 仍报不一致。根因:vendored SPAKE2 的 `SPAKE2_process_msg`
+  单次消费(成功即 state → key_generated),第一次 finish 虽因 confirm
+  不匹配失败,ctx 已耗尽,后续重试全被 state 检查拒绝。§4/§5 承诺的
+  "邀请码不必重发,B 重发回复码即可"从未有测试覆盖。修法:
+  `swx_session_finish` 失败路径(暗号不一致/份额解码失败/HKDF 失败)
+  将 ctx 整struct 快照回滚到 process_msg 之前(名字指针来回同值,
+  无双重释放;栈上副本用后即清),成功路径不变仍配对即焚。
+  test_session 新增重试闭环:错暗号失败 → 同一邀请码 + 正确暗号重发 →
+  A 原会话重试成功,SAS 一致,消息可收发。wire-spec §2 同步。
+
 - **2026-11 永久隐藏状态栏(根治)**(所有者决策,第八批收尾3):两轮缓解
   (TaskDescription 透明系统栏;setRecentsScreenshotEnabled(false) +
   退后台瞬时隐藏)真机均无效后,所有者定案永久隐藏状态栏:onCreate 中

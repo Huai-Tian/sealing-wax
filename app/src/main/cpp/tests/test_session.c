@@ -200,6 +200,45 @@ static int test_pairing_wrong_secret(void)
         swx_session_free(a2);
     }
 
+    /* 真机 BUG(2026-11,第八批后):B 先用错暗号回复,A finish 失败;
+     * B 复用同一邀请码 + 正确暗号重发,A 必须能凭原会话重试成功——
+     * SPAKE2_process_msg 单次消费,失败路径需回滚 ctx(swx_session_finish) */
+    {
+        swx_session *x = NULL, *y = NULL;
+        char sx[SWX_SAS_DIGITS + 1], sy[SWX_SAS_DIGITS + 1];
+        char pieces[1][PIECE_STRIDE];
+        uint32_t np = 0;
+        uint8_t out[64];
+        size_t out_len = 0;
+
+        CHECK(swx_session_create(&x, SWX_ROLE_INVITER) == SWX_OK);
+        CHECK(swx_session_invite(x, PAIR_SECRET, PAIR_SECRET_LEN,
+                                 inv, sizeof inv, &n) == SWX_OK);
+        /* B 用错暗号回复:A 报暗号不一致,但会话必须保持可重试 */
+        CHECK(swx_session_create(&y, SWX_ROLE_RESPONDER) == SWX_OK);
+        CHECK(swx_session_reply(y, WRONG, sizeof WRONG - 1, inv, n,
+                                rep, sizeof rep, &rn) == SWX_OK);
+        CHECK(swx_session_finish(x, rep, rn) == SWX_E_CRYPTO);
+        CHECK(swx_session_role(x) == SWX_ROLE_INVITER);   /* 仍 NEW */
+        swx_session_free(y);
+        /* B 复用同一邀请码 + 正确暗号;A 原会话重试 */
+        CHECK(swx_session_create(&y, SWX_ROLE_RESPONDER) == SWX_OK);
+        CHECK(swx_session_reply(y, PAIR_SECRET, PAIR_SECRET_LEN, inv, n,
+                                rep, sizeof rep, &rn) == SWX_OK);
+        CHECK(swx_session_finish(x, rep, rn) == SWX_OK);
+        CHECK(swx_session_sas(x, sx) == SWX_OK);
+        CHECK(swx_session_sas(y, sy) == SWX_OK);
+        CHECK(strcmp(sx, sy) == 0);
+        /* 重试建立的会话可正常收发 */
+        CHECK(swx_session_seal_text(x, (const uint8_t *) "retry ok", 8, NULL,
+                                    (char *) pieces, PIECE_STRIDE, MAX_PIECES,
+                                    &np) == SWX_OK);
+        CHECK(open_b64(y, pieces[0], out, sizeof out, &out_len) == SWX_OK);
+        CHECK(out_len == 8 && memcmp(out, "retry ok", 8) == 0);
+        swx_session_free(x);
+        swx_session_free(y);
+    }
+
     /* the two responder key schedules must differ (blob layout: key at 12) */
     CHECK(memcmp(blob1 + 12, blob2 + 12, 32) != 0);
     sodium_memzero(blob1, sizeof blob1);

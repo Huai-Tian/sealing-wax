@@ -379,6 +379,15 @@ int swx_session_reply(swx_session *s,
 int swx_session_finish(swx_session *s, const uint8_t *reply, size_t reply_len)
 {
     struct spake2_ctx_st *ctx;
+    /* 重试快照(真机 BUG 修复 2026-11):SPAKE2_process_msg 单次消费——
+     * 成功即把 ctx->state 推进到 key_generated,confirm 不匹配时若不回滚,
+     * 发起方对后续任何回复码重试都会被 state 检查拒绝(表现为"暗号始终
+     * 不一致")。§4/§5 的设计行为是"邀请码不必重发,B 重发回复码即可",
+     * 故失败路径把 ctx 原样还原到 process_msg 之前。结构体含 my_name/
+     * their_name 指针,但快照与还原都作用于同一活分配,指针值来回一致,
+     * 无双重释放(swx_session.c 对该结构本就有 spake_burn 的 white-box
+     * 先例);栈上副本用后即清(与 pake_raw 同级纪律)。 */
+    struct spake2_ctx_st snapshot;
     uint8_t pake_raw[SPAKE2_MAX_KEY_SIZE];
     uint8_t confirm[SWX_PAIR_CONFIRM_LEN];
     size_t key_len = 0;
@@ -398,17 +407,26 @@ int swx_session_finish(swx_session *s, const uint8_t *reply, size_t reply_len)
         return SWX_E_STATE;
     }
 
+    memcpy(&snapshot, ctx, sizeof snapshot);
     if (SPAKE2_process_msg(ctx, pake_raw, &key_len, sizeof pake_raw,
                            reply, SWX_PAIR_MSG_LEN) != 1) {
+        /* 份额解码失败:state 通常未被消费,回滚同样无害 */
+        memcpy(ctx, &snapshot, sizeof snapshot);
+        sodium_memzero(&snapshot, sizeof snapshot);
         return SWX_E_CRYPTO;
     }
     if ((ret = confirm_calc(confirm, pake_raw)) != SWX_OK) {
+        memcpy(ctx, &snapshot, sizeof snapshot);
+        sodium_memzero(&snapshot, sizeof snapshot);
         sodium_memzero(pake_raw, sizeof pake_raw);
         return ret;
     }
-    /* 暗号一致性在这里裁决:confirm 不匹配 = 双端密钥不同,永不建立 */
+    /* 暗号一致性在这里裁决:confirm 不匹配 = 双端密钥不同,永不建立。
+     * 回滚后发起方可凭同一邀请码重试下一条回复码 */
     if (sodium_memcmp(confirm, reply + SWX_PAIR_MSG_LEN,
                       SWX_PAIR_CONFIRM_LEN) != 0) {
+        memcpy(ctx, &snapshot, sizeof snapshot);
+        sodium_memzero(&snapshot, sizeof snapshot);
         sodium_memzero(pake_raw, sizeof pake_raw);
         sodium_memzero(confirm, sizeof confirm);
         return SWX_E_CRYPTO;
@@ -417,6 +435,7 @@ int swx_session_finish(swx_session *s, const uint8_t *reply, size_t reply_len)
 
     sodium_memzero(pake_raw, sizeof pake_raw);
     sodium_memzero(confirm, sizeof confirm);
+    sodium_memzero(&snapshot, sizeof snapshot);
     spake_burn(s);    /* inviter burns pairing material on completion */
     return ret;
 }
