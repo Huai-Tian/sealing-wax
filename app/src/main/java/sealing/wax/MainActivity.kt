@@ -11,6 +11,9 @@
  */
 package sealing.wax
 
+import android.app.ActivityManager
+import android.graphics.Color
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.view.WindowManager
@@ -66,6 +69,24 @@ class MainActivity : ComponentActivity() {
             WindowManager.LayoutParams.FLAG_SECURE,
         )
         enableEdgeToEdge()
+
+        /* FLAG_SECURE 的最近任务缩略图(真机反馈,第八批收尾):AOSP 对安全
+         * 窗口按 TaskDescription 画"应用主题快照"——背景 = backgroundColor,
+         * 再由 SystemBarBackgroundPainter 按栏颜色补画状态栏/导航栏背景
+         * (顶部黑条即此)。显式设背景纯白 + 系统栏全透明:alpha=0 时
+         * calculateBarColor 直接返回透明,补画跳过 → 全白卡片,无需隐藏
+         * 状态栏。App 自建的 TaskDescription 对比度强制默认 false,不会
+         * 退化成半透明 scrim。Builder 为 API 33 公开接口;<33 无此绘制
+         * 路径,保持原样 */
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            setTaskDescription(
+                ActivityManager.TaskDescription.Builder()
+                    .setBackgroundColor(Color.WHITE)
+                    .setStatusBarColor(Color.TRANSPARENT)
+                    .setNavigationBarColor(Color.TRANSPARENT)
+                    .build()
+            )
+        }
 
         SessionManager.appContext = applicationContext
         /* 上次遗留的分享暂存清掉;密文缓存不该比会话活得更久 */

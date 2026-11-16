@@ -339,6 +339,12 @@ B 侧说明:  B 在生成回复码时即已建立会话(两帧下限,B 无配对
   应用内返回(开源页/配对两屏/对话屏退出流)仍走 BackHandler,经
   androidx dispatcher 桥接,手势承诺时触发;应用内进度联动动画留待
   后续批次
+- FLAG_SECURE 的最近任务缩略图(2026-11 第八批收尾,真机反馈):AOSP 对
+  安全窗口按 TaskDescription 画"应用主题快照"——背景 = backgroundColor,
+  再按其系统栏颜色补画状态栏/导航栏背景条(顶部黑条即此)。显式
+  setTaskDescription:背景纯白 + 系统栏全透明(alpha=0 时补画直接跳过)
+  → 全白卡片,无需隐藏状态栏;API 33+ Builder,<33 无此绘制路径不动。
+  ROM 自绘占位图属系统行为,如实接受
 
 ## 10. 架构与工程决策
 
@@ -437,6 +443,19 @@ trademark_note: "发布前做类别 9/42 商标检索;英文表述永远用'两�
 | 续聊/邀请 | (无此概念) | 纯钥匙直连;type 0x05 设计中途否决 |
 
 ### 2.0-draft 之后(实现期变更)
+
+- **2026-11 FLAG_SECURE 最近任务缩略图黑条修正**(真机反馈,第八批收尾):
+  缩略图顶部出现带状态栏痕迹的黑条。AOSP 源码定位(AbsAppSnapshotController
+  → SnapshotDrawerUtils):安全窗口的快照 = TaskDescription.background 整屏
+  填充 + SystemBarBackgroundPainter 按主题继承的栏颜色补画状态栏/导航栏
+  背景——黑条即补画产物;隐藏状态栏时 requestedVisibleTypes 不含
+  statusBars,补画跳过,故全白。修法:Activity 显式 setTaskDescription
+  (背景纯白 + 系统栏全透明,App 自建描述的对比度强制默认 false):
+  alpha=0 时 drawStatusBarBackground/drawNavigationBarBackground 直接
+  跳过 → 纯白卡片,状态栏照常显示。TaskDescription.Builder(含
+  setStatusBarColor/setNavigationBarColor/setBackgroundColor)为 API 33
+  公开接口(Android 12 及以下这些 setter 为 @hide 且无此绘制路径),
+  SDK_INT ≥ 33 守卫,更旧系统保持原样。
 
 - **2026-11 关于第一行正常色 + 预测性返回**(所有者指示,UI 优化第八批):
   关于弹窗第一行(应用名/版本号)由蓝字改回默认色——蓝字仅保留菜单当前
