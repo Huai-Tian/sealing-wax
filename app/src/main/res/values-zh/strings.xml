@@ -47,7 +47,6 @@
     <string name="pair_reply_btn">生成回复码</string>
     <string name="pair_reply_code">回复码</string>
     <string name="pair_enter_chat">对方核对无误,进入对话</string>
-    <string name="pair_retry_secret">重新填写暗号</string>
     <string name="clear_field_cd">清空输入</string>
 
     <!-- chat: shell -->

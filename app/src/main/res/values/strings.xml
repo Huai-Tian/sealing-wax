@@ -48,9 +48,6 @@
     <string name="pair_reply_btn">Generate reply code</string>
     <string name="pair_reply_code">Reply code</string>
     <string name="pair_enter_chat">They\'ve verified it — enter the chat</string>
-    <!-- Wrong-passphrase recovery on the reply page: detection happens only
-         on the inviter's side, so this stays always visible, not conditional. -->
-    <string name="pair_retry_secret">Re-enter passphrase</string>
     <string name="clear_field_cd">Clear input</string>
 
     <!-- chat: shell -->
