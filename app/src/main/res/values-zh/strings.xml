@@ -50,6 +50,8 @@
     <string name="pair_reply_send_back">把回复码发回给对方</string>
     <string name="pair_done_hint">对方确认后你们就在同一会话里了。\n验证码 9 位数字会一直显示在对话页右上角,想核对随时念码。</string>
     <string name="pair_enter_chat">我已发送,进入对话</string>
+    <string name="pair_retry_secret">重新填写暗号</string>
+    <string name="clear_field_cd">清空输入</string>
 
     <!-- chat: shell -->
     <string name="chat_default_title">会话</string>
@@ -94,6 +96,7 @@
 
     <!-- chat: save-or-discard -->
     <string name="save_title">保存这个会话吗?</string>
+    <string name="save_now_title">保存会话</string>
     <string name="save_text">不保存 = 全部清零,零状态。\n保存的代价:设备被掌控且解锁时,该会话历史可被解;换机即全丢。\n单方保存无效:对方没存,下次对方解不开。</string>
     <string name="save_name_label">会话名称(不是联系人)</string>
     <string name="save_btn">保存</string>

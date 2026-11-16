@@ -30,6 +30,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -108,6 +109,7 @@ fun NewSessionScreen(
                     label = { Text(stringResource(R.string.pair_secret_label)) },
                     supportingText = { Text(stringResource(R.string.pair_secret_hint)) },
                     singleLine = true,
+                    trailingIcon = { ClearFieldIcon(secret) { secret = "" } },
                 )
                 Button(
                     onClick = {
@@ -152,6 +154,7 @@ fun NewSessionScreen(
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text(stringResource(R.string.pair_reply_label)) },
                     singleLine = true,
+                    trailingIcon = { ClearFieldIcon(reply) { reply = "" } },
                 )
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 Button(
@@ -232,6 +235,7 @@ fun JoinSessionScreen(
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text(stringResource(R.string.pair_invite_code)) },
                     singleLine = true,
+                    trailingIcon = { ClearFieldIcon(invite) { invite = "" } },
                 )
                 OutlinedTextField(
                     value = secret,
@@ -240,6 +244,7 @@ fun JoinSessionScreen(
                     label = { Text(stringResource(R.string.pair_secret_same)) },
                     supportingText = { Text(stringResource(R.string.pair_secret_hint)) },
                     singleLine = true,
+                    trailingIcon = { ClearFieldIcon(secret) { secret = "" } },
                 )
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 Button(
@@ -290,6 +295,21 @@ fun JoinSessionScreen(
                 Button(onClick = onJoined, modifier = Modifier.fillMaxWidth()) {
                     Text(stringResource(R.string.pair_enter_chat))
                 }
+                /* 暗号重填入口(被邀请方重试闭环的 UI 半边):B 侧在生成
+                 * 回复码时无从得知暗号对错(§4/§5 两帧下限,裁决在 A 端
+                 * finish 的 confirm),A 通过 IM 告知暗号不一致后由此返回。
+                 * 当前会话是用(疑似错误)暗号派生的废钥,直接整体焚毁;
+                 * 邀请码与暗号都保留在输入框(长暗号免重打,错一字改一字,
+                 * 想全换点暗号框的 X 一键清空)——重生成回复码即
+                 * §4 协议路径:同一邀请码 + 新回复码,邀请码不必重发 */
+                OutlinedButton(
+                    onClick = {
+                        SessionManager.abortPairing()
+                        error = null
+                        reply = null
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text(stringResource(R.string.pair_retry_secret)) }
             }
             Spacer(Modifier.height(32.dp))
         }

@@ -226,7 +226,13 @@ object SessionManager {
             s.history.add(HistoryEntry(m.dir, m.ts, ByteArray(16), m.pieces))
         }
         Persistence.saveSession(context, s)
-        Persistence.writeCounters(context, s.id, c[0], c[1])
+        /* 落盘预支号段而非当前值(对齐 openSaved 语义,第九批):中途保存
+         * 后会话继续,若只写 c[0],首条消息的 counter 消耗与 ensurePrepaid
+         * 落盘之间存在崩溃窗口——重开会从 c[0] 重来,重号违反 §4"绝不
+         * 重号"。预支段把该窗口封死;退出流的 syncNow 随后会以实际值
+         * 覆写(≥ next-unused,同样安全) */
+        Persistence.writeCounters(context, s.id, c[0] + PREPAY, c[1])
+        prepaidEnd = c[0] + PREPAY
         saved = s
         dirty = false
     }

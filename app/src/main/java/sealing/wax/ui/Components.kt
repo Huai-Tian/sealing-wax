@@ -36,9 +36,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.OutlinedTextField
@@ -72,6 +75,22 @@ import androidx.compose.ui.window.PopupProperties
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.qrcode.QRCodeWriter
 import sealing.wax.R
+
+/** 输入框尾随清空钮(第九批,所有者指示):灰色圆底 X(Icons.Cancel
+ *  染 onSurfaceVariant 灰),有内容才显示,点击一键清空。用于
+ *  OutlinedTextField 的 trailingIcon 槽;配对两屏 4 框 + 对话屏
+ *  输入栏,弹窗内命名框不加(所有者选配)。 */
+@Composable
+fun ClearFieldIcon(text: String, onClear: () -> Unit) {
+    if (text.isNotEmpty()) {
+        Icon(
+            Icons.Default.Cancel,
+            contentDescription = stringResource(R.string.clear_field_cd),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.clickable(onClick = onClear),
+        )
+    }
+}
 
 /** Big grouped SAS display: 123-456-789. */
 @Composable

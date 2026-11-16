@@ -107,6 +107,9 @@ fun ChatScreen(
     isSaved: Boolean,
     onExit: () -> Unit,
     onRenameTitle: ((String) -> Unit)? = null,
+    /** 未保存会话点顶栏标题 → 命名并立即保存后回调(第九批):
+     *  宿主借此翻转 title/isSaved,此后点题走改名 */
+    onLiveSaved: ((String) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
@@ -118,6 +121,7 @@ fun ChatScreen(
     var panelOpen by remember { mutableStateOf(false) }
     var sasOpen by remember { mutableStateOf(false) }
     var saveDialog by remember { mutableStateOf(false) }
+    var saveNowOpen by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf<String?>(null) }
     var pendingSwx by remember { mutableStateOf<Uri?>(null) }
     var swxVerdict by remember { mutableStateOf<String?>(null) }
@@ -301,10 +305,14 @@ fun ChatScreen(
                 title = {
                     Text(
                         title,
-                        modifier = if (isSaved && onRenameTitle != null) {
-                            Modifier.clickable { renameOpen = true }
-                        } else {
-                            Modifier
+                        modifier = when {
+                            isSaved && onRenameTitle != null ->
+                                Modifier.clickable { renameOpen = true }
+                            /* 未保存会话:点题 = 命名并立即保存(第九批);
+                             * 保存经 onLiveSaved 翻转 isSaved 后走改名 */
+                            !isSaved && onLiveSaved != null ->
+                                Modifier.clickable { saveNowOpen = true }
+                            else -> Modifier
                         },
                     )
                 },
@@ -441,6 +449,7 @@ fun ChatScreen(
                             label = { Text(stringResource(R.string.input_label)) },
                             minLines = 1,
                             maxLines = 5,
+                            trailingIcon = { ClearFieldIcon(input) { input = "" } },
                         )
                         /* 右槽 0.2:空框 = "+",有字 = [加密并复制](微信式) */
                         if (input.isEmpty()) {
@@ -556,6 +565,47 @@ fun ChatScreen(
             },
             /* M3 要求 confirmButton 必传;空槽 = 无按钮,点空白关闭 */
             confirmButton = {},
+        )
+    }
+
+    /* 未保存会话点顶栏标题:命名并立即保存(第九批,§6 第二保存入口)。
+     * 保存后不离开对话继续聊(活会话与信封同钥,后续消息经 saved 路径
+     * 记账);isSaved 翻转后退出不再弹保存窗——"已保存过不再打扰" */
+    if (saveNowOpen) {
+        var name by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { saveNowOpen = false },
+            title = { Text(stringResource(R.string.save_now_title)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(stringResource(R.string.save_text))
+                    OutlinedTextField(
+                        value = name,
+                        onValueChange = { name = it },
+                        label = { Text(stringResource(R.string.save_name_label)) },
+                        singleLine = true,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val finalName =
+                            name.ifBlank { context.getString(R.string.unnamed_session) }
+                        SessionManager.saveLiveAs(finalName, context)
+                        saveNowOpen = false
+                        onLiveSaved?.invoke(finalName)
+                        Toast.makeText(
+                            context, context.getString(R.string.saved_toast), Toast.LENGTH_SHORT,
+                        ).show()
+                    },
+                ) { Text(stringResource(R.string.save_btn)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { saveNowOpen = false }) {
+                    Text(stringResource(R.string.common_cancel))
+                }
+            },
         )
     }
 

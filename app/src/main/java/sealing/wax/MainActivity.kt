@@ -264,6 +264,12 @@ private fun App() {
                 onRenameTitle = { name ->
                     if (SessionManager.renameCurrent(name)) chatTitle = name
                 },
+                /* 未保存会话点题保存后(第九批):翻转为已保存态——
+                 * 顶栏换名、点题走改名、退出不再弹保存窗 */
+                onLiveSaved = { name ->
+                    chatTitle = name
+                    chatSaved = true
+                },
                 onExit = { goHome() },
             )
         }

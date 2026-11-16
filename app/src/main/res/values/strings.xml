@@ -51,6 +51,10 @@
     <string name="pair_reply_send_back">Send the reply code back to them</string>
     <string name="pair_done_hint">Once they confirm, you\'re both in the same session.\nThe 9-digit verification number stays at the top of the chat screen — read it out anytime to verify.</string>
     <string name="pair_enter_chat">Sent — enter the chat</string>
+    <!-- Wrong-passphrase recovery on the reply page: detection happens only
+         on the inviter's side, so this stays always visible, not conditional. -->
+    <string name="pair_retry_secret">Re-enter passphrase</string>
+    <string name="clear_field_cd">Clear input</string>
 
     <!-- chat: shell -->
     <string name="chat_default_title">Session</string>
@@ -95,6 +99,9 @@
 
     <!-- chat: save-or-discard -->
     <string name="save_title">Save this session?</string>
+    <!-- also the title of the mid-chat save dialog (tap the top title of an
+         unsaved session; ninth batch) -->
+    <string name="save_now_title">Save session</string>
     <string name="save_text">Not saving = everything is wiped; zero state.\nThe cost of saving: if this device is seized while unlocked, this session\'s history can be opened; switching devices loses it.\nSaving on one side only is void: if they didn\'t save, they can\'t open future messages.</string>
     <string name="save_name_label">Session name (not a contact)</string>
     <string name="save_btn">Save</string>
