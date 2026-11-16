@@ -334,6 +334,11 @@ B 侧说明:  B 在生成回复码时即已建立会话(两帧下限,B 无配对
   内部异常消息不上屏,诊断进日志。启动器标签与首页顶栏共用 app_name
 - 技术底线:FLAG_SECURE(禁截屏/禁最近任务缩略图)、allowBackup=false、
   release 剥离日志且永不打印密钥/明文
+- 预测性返回(2026-11 第八批):manifest `enableOnBackInvokedCallback=true`,
+  首页不拦截系统返回——Android 14+ 播放缩回图标的预测动画,旧行为不变;
+  应用内返回(开源页/配对两屏/对话屏退出流)仍走 BackHandler,经
+  androidx dispatcher 桥接,手势承诺时触发;应用内进度联动动画留待
+  后续批次
 
 ## 10. 架构与工程决策
 
@@ -432,6 +437,16 @@ trademark_note: "发布前做类别 9/42 商标检索;英文表述永远用'两�
 | 续聊/邀请 | (无此概念) | 纯钥匙直连;type 0x05 设计中途否决 |
 
 ### 2.0-draft 之后(实现期变更)
+
+- **2026-11 关于第一行正常色 + 预测性返回**(所有者指示,UI 优化第八批):
+  关于弹窗第一行(应用名/版本号)由蓝字改回默认色——蓝字仅保留菜单当前
+  值(accentBlue 回归菜单专用)。预测性返回:manifest 开
+  `enableOnBackInvokedCallback=true`,首页解除 BackHandler 拦截(原实现
+  自己 finish() 会吃掉系统动画)——系统返回直接回桌面,Android 14+ 播放
+  缩回图标的预测动画;其余应用内返回(开源页/配对两屏/对话屏退出流)
+  行为不变,BackHandler 经 androidx dispatcher 桥接到 OnBackInvokedCallback,
+  手势承诺时触发,minSdk 24 老设备自动回退传统返回。应用内进度联动动画
+  (屏随手势缩放)留待后续批次。
 
 - **2026-11 关于弹窗两行布局**(所有者指示,UI 优化第七批):文字改两行
   ——第一行 = 应用名(左对齐蓝字 18sp)+ 裸版本号(右对齐蓝字 18sp),

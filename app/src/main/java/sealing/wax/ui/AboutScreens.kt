@@ -121,7 +121,8 @@ fun AboutDialog(onDismiss: () -> Unit) {
                         .width(IntrinsicSize.Max),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    /* 第一行:应用名(左对齐蓝字)+ 版本号(右对齐蓝字) */
+                    /* 第一行:应用名(左)+ 版本号(右),正常色(第八批:
+                     * 蓝字仅保留给菜单当前值) */
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -129,9 +130,8 @@ fun AboutDialog(onDismiss: () -> Unit) {
                         Text(
                             stringResource(R.string.app_name),
                             fontSize = 18.sp,
-                            color = accentBlue(),
                         )
-                        Text(version, fontSize = 18.sp, color = accentBlue())
+                        Text(version, fontSize = 18.sp)
                     }
                     /* 第二行:源码链接(维持原样) */
                     Text(

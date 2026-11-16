@@ -11,7 +11,6 @@
  */
 package sealing.wax
 
-import android.app.Activity
 import android.os.Bundle
 import android.util.Log
 import android.view.WindowManager
@@ -148,8 +147,9 @@ private fun App() {
 
     when (dest) {
         Dest.Home -> {
-            /* 退出 App:直接清零,无弹窗 (§5) —— 未保存会话随进程消失 */
-            BackHandler { (context as? Activity)?.finish() }
+            /* 退出 App:直接清零,无弹窗 (§5) —— 未保存会话随进程消失。
+             * 首页不拦截返回:系统返回直接回桌面,Android 14+ 播放预测性
+             * 返回动画(缩回图标);自己 finish() 会吃掉系统动画(第八批) */
             HomeScreen(
                 state = listState,
                 onRetryLoad = { reload() },

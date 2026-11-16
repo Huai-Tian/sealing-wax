@@ -201,8 +201,9 @@ private val OverflowMenuItemPadding = 16.dp
 /** 自定义行(带尾随控件)复用菜单几何用:菜单行最小宽。 */
 internal val OverflowMenuRowMinWidth = OverflowMenuMinWidth
 
-/** 强调蓝(所有者指示):菜单当前值 / 关于弹窗标题行共用;深浅主题各取
- *  一档保证对比度。全 App 唯一的"蓝字"来源,想改主题色只动这里。 */
+/** 强调蓝(所有者指示):菜单当前值专用(关于弹窗第一行已改回正常色,
+ *  第八批);深浅主题各取一档保证对比度。全 App 唯一的"蓝字"来源,
+ *  想改主题色只动这里。 */
 @Composable
 internal fun accentBlue(): Color =
     if (isSystemInDarkTheme()) Color(0xFF90CAF9) else Color(0xFF1976D2)
