@@ -269,11 +269,9 @@ fun JoinSessionScreen(
                     modifier = Modifier.fillMaxWidth(),
                 ) { Text(stringResource(R.string.pair_reply_btn)) }
             } else {
-                Text(
-                    stringResource(R.string.pair_reply_send_back),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                )
+                /* 回复页只留:回复码卡 + 两个按钮(第十批收尾2:两行提示
+                 * 文案删除——卡片标题"回复码"+复制钮已自明,SAS 常驻顶栏
+                 * 对话屏内可发现) */
                 CodeCard(
                     title = stringResource(R.string.pair_reply_code),
                     code = reply ?: "",
@@ -285,11 +283,6 @@ fun JoinSessionScreen(
                             Text(stringResource(R.string.common_copy))
                         }
                     },
-                )
-                Text(
-                    stringResource(R.string.pair_done_hint),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Button(onClick = onJoined, modifier = Modifier.fillMaxWidth()) {
                     Text(stringResource(R.string.pair_enter_chat))

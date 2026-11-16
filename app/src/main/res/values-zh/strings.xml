@@ -46,9 +46,7 @@
     <string name="pair_fail_join">加入失败</string>
     <string name="pair_reply_btn">生成回复码</string>
     <string name="pair_reply_code">回复码</string>
-    <string name="pair_reply_send_back">把回复码发回给对方</string>
-    <string name="pair_done_hint">对方确认后你们就在同一会话里了。\n验证码 9 位数字会一直显示在对话页右上角,想核对随时念码。</string>
-    <string name="pair_enter_chat">我已发送,进入对话</string>
+    <string name="pair_enter_chat">对方核对无误,进入对话</string>
     <string name="pair_retry_secret">重新填写暗号</string>
     <string name="clear_field_cd">清空输入</string>
 

@@ -47,9 +47,7 @@
     <string name="pair_fail_join">Join failed</string>
     <string name="pair_reply_btn">Generate reply code</string>
     <string name="pair_reply_code">Reply code</string>
-    <string name="pair_reply_send_back">Send the reply code back to them</string>
-    <string name="pair_done_hint">Once they confirm, you\'re both in the same session.\nThe 9-digit verification number stays at the top of the chat screen — read it out anytime to verify.</string>
-    <string name="pair_enter_chat">Sent — enter the chat</string>
+    <string name="pair_enter_chat">They\'ve verified it — enter the chat</string>
     <!-- Wrong-passphrase recovery on the reply page: detection happens only
          on the inviter's side, so this stays always visible, not conditional. -->
     <string name="pair_retry_secret">Re-enter passphrase</string>
