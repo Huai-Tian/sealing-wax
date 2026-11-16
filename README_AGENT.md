@@ -339,15 +339,16 @@ B 侧说明:  B 在生成回复码时即已建立会话(两帧下限,B 无配对
   应用内返回(开源页/配对两屏/对话屏退出流)仍走 BackHandler,经
   androidx dispatcher 桥接,手势承诺时触发;应用内进度联动动画留待
   后续批次
-- FLAG_SECURE 的最近任务缩略图(2026-11 第八批收尾,两轮真机反馈):
-  缩略图顶部出现"带状态栏痕迹的黑条"。AOSP 任务快照只捕获应用窗口,
-  理论上不含状态栏——真机现象表明该 ROM 以整屏捕获出图(FLAG_SECURE
-  挡应用区域,实况状态栏属系统层照常入镜)。缓解:setRecentsScreenshot
-  Enabled(false)(API 33+)+ 退后台瞬间隐藏状态栏(onUserLeaveHint/
-  onPause,回前台恢复;对话框/菜单不触发,无假阳性;代价 = 滑出动画
-  期间状态栏提前消失 + 内容上移一档)。TaskDescription 透明系统栏方案
-  (AOSP app-theme 快照绘制路径)真机无效,已撤销——文档保留于 §15。
-  ROM 自绘占位属系统行为,如实接受
+- FLAG_SECURE 的最近任务缩略图(2026-11 第八批收尾,三轮真机反馈定案):
+  缩略图顶部曾出现"带状态栏痕迹的黑条"。AOSP 任务快照只捕获应用窗口,
+  不含状态栏——该现象为本机 ROM 整屏捕获出图(FLAG_SECURE 挡应用区域,
+  实况状态栏属系统层照常入镜)。两轮缓解(TaskDescription 透明系统栏;
+  setRecentsScreenshotEnabled(false) + 退后台瞬时隐藏状态栏)真机均
+  无效,已撤销。**终案(所有者决策):永久隐藏状态栏(根治)**——
+  onCreate 中 WindowInsetsController.hide(statusBars) +
+  BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE(顶部下滑临时唤出,Transient
+  不重排版);insets 归零后缩略图全白。调查全程见 §15。ROM 自绘占位
+  属系统行为,如实接受
 
 ## 10. 架构与工程决策
 
@@ -447,7 +448,16 @@ trademark_note: "发布前做类别 9/42 商标检索;英文表述永远用'两�
 
 ### 2.0-draft 之后(实现期变更)
 
-- **2026-11 FLAG_SECURE 最近任务缩略图黑条二连**(真机反馈,第八批收尾2):
+- **2026-11 永久隐藏状态栏(根治)**(所有者决策,第八批收尾3):两轮缓解
+  (TaskDescription 透明系统栏;setRecentsScreenshotEnabled(false) +
+  退后台瞬时隐藏)真机均无效后,所有者定案永久隐藏状态栏:onCreate 中
+  `WindowInsetsControllerCompat.hide(statusBars)` +
+  `BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE`(顶部下滑临时唤出,Transient
+  覆盖不重排版);两轮缓解代码全部撤销,MainActivity 恢复至 786bc3c7
+  状态后再加本块。副作用备忘:应用内不再显示状态栏(时间/电量改由
+  下滑临时查看),各屏内容上移一档;导航栏不受影响。
+
+- **2026-11 FLAG_SECURE 最近任务缩略图黑条二连**(已撤销,真机反馈,
   第一轮 TaskDescription 方案(背景纯白 + 系统栏全透明,作用于 AOSP
   app-theme 快照的 SystemBarBackgroundPainter 绘制路径)真机无效,撤销。
   复盘:AOSP 任务快照(captureLayersExcluding)只捕获任务自己的

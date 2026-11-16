@@ -11,7 +11,6 @@
  */
 package sealing.wax
 
-import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.view.WindowManager
@@ -22,6 +21,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -70,20 +70,17 @@ class MainActivity : ComponentActivity() {
         )
         enableEdgeToEdge()
 
-        /* 最近任务缩略图顶部黑条(真机反馈;TaskDescription 透明系统栏方案
-         * 无效,已撤销):AOSP 任务快照只捕获应用窗口,理论上不可能带状态栏
-         * ——真机所见"带状态栏痕迹的黑条"说明该 ROM 以整屏捕获出图:
-         * FLAG_SECURE 挡住了应用区域,但实况状态栏属系统层,照常入镜。
-         * 两层缓解:
-         * 1) setRecentsScreenshotEnabled(false)(API 33+ 公开接口):
-         *    明确告知系统 Overview 不得使用真实截图;
-         * 2) 退后台瞬间隐藏状态栏(onUserLeaveHint/onPause)、回前台恢复
-         *    ——快照时刻 requestedVisibleTypes 不含 statusBars,顶部条
-         *    消失(真机已验证:状态栏隐藏 = 全白)。对话框/菜单不触发
-         *    onPause,无假阳性;代价:滑出动画期间状态栏提前消失 + 内容
-         *    上移一档( insets 归零引起)。 */
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            setRecentsScreenshotEnabled(false)
+        /* 永久隐藏状态栏(根治,所有者决策 2026-11):本机 ROM 的最近任务
+         * 缩略图为整屏捕获——FLAG_SECURE 只能挡住应用区域,实况状态栏
+         * 属系统层照常入镜,形成顶部黑条(TaskDescription 透明系统栏、
+         * setRecentsScreenshotEnabled + 退后台瞬时隐藏两轮缓解均真机
+         * 无效,已撤销,调查全程见 README_AGENT §15)。永久隐藏后
+         * insets 归零,缩略图全白;从屏幕顶部下滑可临时唤出状态栏
+         * (Transient 覆盖,不触发重排版)。 */
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            hide(WindowInsetsCompat.Type.statusBars())
+            systemBarsBehavior =
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
 
         SessionManager.appContext = applicationContext
@@ -100,28 +97,6 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
-    }
-
-    override fun onUserLeaveHint() {
-        super.onUserLeaveHint()
-        hideStatusBarForSnapshot()
-    }
-
-    override fun onPause() {
-        /* 系统发起的后台切换(来电全屏等)不走 onUserLeaveHint,双保险 */
-        hideStatusBarForSnapshot()
-        super.onPause()
-    }
-
-    override fun onResume() {
-        super.onResume()
-        WindowCompat.getInsetsController(window, window.decorView)
-            .show(WindowInsetsCompat.Type.statusBars())
-    }
-
-    private fun hideStatusBarForSnapshot() {
-        WindowCompat.getInsetsController(window, window.decorView)
-            .hide(WindowInsetsCompat.Type.statusBars())
     }
 
     override fun onStop() {
