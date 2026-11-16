@@ -339,12 +339,15 @@ B 侧说明:  B 在生成回复码时即已建立会话(两帧下限,B 无配对
   应用内返回(开源页/配对两屏/对话屏退出流)仍走 BackHandler,经
   androidx dispatcher 桥接,手势承诺时触发;应用内进度联动动画留待
   后续批次
-- FLAG_SECURE 的最近任务缩略图(2026-11 第八批收尾,真机反馈):AOSP 对
-  安全窗口按 TaskDescription 画"应用主题快照"——背景 = backgroundColor,
-  再按其系统栏颜色补画状态栏/导航栏背景条(顶部黑条即此)。显式
-  setTaskDescription:背景纯白 + 系统栏全透明(alpha=0 时补画直接跳过)
-  → 全白卡片,无需隐藏状态栏;API 33+ Builder,<33 无此绘制路径不动。
-  ROM 自绘占位图属系统行为,如实接受
+- FLAG_SECURE 的最近任务缩略图(2026-11 第八批收尾,两轮真机反馈):
+  缩略图顶部出现"带状态栏痕迹的黑条"。AOSP 任务快照只捕获应用窗口,
+  理论上不含状态栏——真机现象表明该 ROM 以整屏捕获出图(FLAG_SECURE
+  挡应用区域,实况状态栏属系统层照常入镜)。缓解:setRecentsScreenshot
+  Enabled(false)(API 33+)+ 退后台瞬间隐藏状态栏(onUserLeaveHint/
+  onPause,回前台恢复;对话框/菜单不触发,无假阳性;代价 = 滑出动画
+  期间状态栏提前消失 + 内容上移一档)。TaskDescription 透明系统栏方案
+  (AOSP app-theme 快照绘制路径)真机无效,已撤销——文档保留于 §15。
+  ROM 自绘占位属系统行为,如实接受
 
 ## 10. 架构与工程决策
 
@@ -444,7 +447,25 @@ trademark_note: "发布前做类别 9/42 商标检索;英文表述永远用'两�
 
 ### 2.0-draft 之后(实现期变更)
 
-- **2026-11 FLAG_SECURE 最近任务缩略图黑条修正**(真机反馈,第八批收尾):
+- **2026-11 FLAG_SECURE 最近任务缩略图黑条二连**(真机反馈,第八批收尾2):
+  第一轮 TaskDescription 方案(背景纯白 + 系统栏全透明,作用于 AOSP
+  app-theme 快照的 SystemBarBackgroundPainter 绘制路径)真机无效,撤销。
+  复盘:AOSP 任务快照(captureLayersExcluding)只捕获任务自己的
+  SurfaceControl,不可能包含状态栏;"带状态栏痕迹的黑条"只能是 ROM 的
+  整屏捕获——FLAG_SECURE 由 SurfaceFlinger 挡住应用区域,实况状态栏是
+  系统层照常入镜;用户已验证"隐藏状态栏 = 全白"即此理。第二轮双层缓解:
+  ① setRecentsScreenshotEnabled(false)(API 33+ 公开接口,旧
+  setDisablePreviewScreenshots 的替代):明确禁止 Overview 使用真实截图;
+  ② 退后台瞬间(onUserLeaveHint + onPause 双保险,系统发起的切换如
+  来电全屏不走前者)隐藏状态栏、onResume 恢复——快照时刻
+  requestedVisibleTypes 不含 statusBars,顶部条消失;对话框/菜单不触发
+  onPause 故无假阳性,SAF 等他窗覆盖时本请求无效、回前台即恢复。
+  已知代价:滑出动画期间状态栏提前消失 + insets 归零引起内容上移一档。
+  调查备忘(社区经验,tomasrepcik.dev):快照在 onPause 的效果落地前
+  即可能创建——onWindowFocusChanged 更早但会被自家对话框/菜单误触发,
+  故弃用;onUserLeaveHint 是无假阳性的最早时机。
+
+- **2026-11 FLAG_SECURE 最近任务缩略图黑条修正**(已撤销,见上条):
   缩略图顶部出现带状态栏痕迹的黑条。AOSP 源码定位(AbsAppSnapshotController
   → SnapshotDrawerUtils):安全窗口的快照 = TaskDescription.background 整屏
   填充 + SystemBarBackgroundPainter 按主题继承的栏颜色补画状态栏/导航栏

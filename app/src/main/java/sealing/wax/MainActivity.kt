@@ -11,8 +11,6 @@
  */
 package sealing.wax
 
-import android.app.ActivityManager
-import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
@@ -22,6 +20,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -70,22 +70,20 @@ class MainActivity : ComponentActivity() {
         )
         enableEdgeToEdge()
 
-        /* FLAG_SECURE 的最近任务缩略图(真机反馈,第八批收尾):AOSP 对安全
-         * 窗口按 TaskDescription 画"应用主题快照"——背景 = backgroundColor,
-         * 再由 SystemBarBackgroundPainter 按栏颜色补画状态栏/导航栏背景
-         * (顶部黑条即此)。显式设背景纯白 + 系统栏全透明:alpha=0 时
-         * calculateBarColor 直接返回透明,补画跳过 → 全白卡片,无需隐藏
-         * 状态栏。App 自建的 TaskDescription 对比度强制默认 false,不会
-         * 退化成半透明 scrim。Builder 为 API 33 公开接口;<33 无此绘制
-         * 路径,保持原样 */
+        /* 最近任务缩略图顶部黑条(真机反馈;TaskDescription 透明系统栏方案
+         * 无效,已撤销):AOSP 任务快照只捕获应用窗口,理论上不可能带状态栏
+         * ——真机所见"带状态栏痕迹的黑条"说明该 ROM 以整屏捕获出图:
+         * FLAG_SECURE 挡住了应用区域,但实况状态栏属系统层,照常入镜。
+         * 两层缓解:
+         * 1) setRecentsScreenshotEnabled(false)(API 33+ 公开接口):
+         *    明确告知系统 Overview 不得使用真实截图;
+         * 2) 退后台瞬间隐藏状态栏(onUserLeaveHint/onPause)、回前台恢复
+         *    ——快照时刻 requestedVisibleTypes 不含 statusBars,顶部条
+         *    消失(真机已验证:状态栏隐藏 = 全白)。对话框/菜单不触发
+         *    onPause,无假阳性;代价:滑出动画期间状态栏提前消失 + 内容
+         *    上移一档( insets 归零引起)。 */
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            setTaskDescription(
-                ActivityManager.TaskDescription.Builder()
-                    .setBackgroundColor(Color.WHITE)
-                    .setStatusBarColor(Color.TRANSPARENT)
-                    .setNavigationBarColor(Color.TRANSPARENT)
-                    .build()
-            )
+            setRecentsScreenshotEnabled(false)
         }
 
         SessionManager.appContext = applicationContext
@@ -102,6 +100,28 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        hideStatusBarForSnapshot()
+    }
+
+    override fun onPause() {
+        /* 系统发起的后台切换(来电全屏等)不走 onUserLeaveHint,双保险 */
+        hideStatusBarForSnapshot()
+        super.onPause()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        WindowCompat.getInsetsController(window, window.decorView)
+            .show(WindowInsetsCompat.Type.statusBars())
+    }
+
+    private fun hideStatusBarForSnapshot() {
+        WindowCompat.getInsetsController(window, window.decorView)
+            .hide(WindowInsetsCompat.Type.statusBars())
     }
 
     override fun onStop() {
