@@ -20,6 +20,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -199,6 +200,12 @@ private val OverflowMenuItemPadding = 16.dp
 
 /** 自定义行(带尾随控件)复用菜单几何用:菜单行最小宽。 */
 internal val OverflowMenuRowMinWidth = OverflowMenuMinWidth
+
+/** 强调蓝(所有者指示):菜单当前值 / 关于弹窗标题行共用;深浅主题各取
+ *  一档保证对比度。全 App 唯一的"蓝字"来源,想改主题色只动这里。 */
+@Composable
+internal fun accentBlue(): Color =
+    if (isSystemInDarkTheme()) Color(0xFF90CAF9) else Color(0xFF1976D2)
 
 /**
  * Shizuku 溢出菜单同款比例的下拉菜单。放进包住锚点按钮的 Box 里使用

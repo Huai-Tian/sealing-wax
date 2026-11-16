@@ -20,11 +20,15 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -44,6 +48,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -55,11 +60,14 @@ import sealing.wax.R
 /** 链接目标(非 UI 文案,常量即可;显示文字一律走资源)。 */
 private const val REPO_URL = "https://github.com/Huai-Tian/sealing-wax"
 
-/** AdaptiveIconDrawable 不能进 painterResource;画到画布取位图最通用。 */
+/** AdaptiveIconDrawable 不能进 painterResource;画到画布取位图最通用。
+ *  显式设 density 使固有尺寸 ≡ 40dp(size px ÷ density 折算)——图标
+ *  跨行对齐依赖固有高度,低密度屏上不设会把 120px 当 120dp 撑爆行高。 */
 private fun launcherIcon(context: Context, size: Int = 256): ImageBitmap {
     val drawable: android.graphics.drawable.Drawable =
         context.packageManager.getApplicationIcon(context.packageName)
     val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+    bmp.density = size * 4    /* size px ≡ 40dp(160 × size / 40) */
     val canvas = Canvas(bmp)
     drawable.setBounds(0, 0, size, size)
     drawable.draw(canvas)
@@ -70,11 +78,11 @@ private fun openRepo(context: Context) {
     context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(REPO_URL)))
 }
 
-/** 关于 = Shizuku 同款极简弹窗(§9,其 about_dialog 布局照搬):40dp 图标 +
- *  应用名(18sp)/ 裸版本号 / 源码链接,横向排布;无标语、无许可证行;
- *  点空白关闭(SAS 弹窗同款)。第六批收紧:裸 Dialog + 自适应宽度——
- *  M3 AlertDialog 强制 280dp 最小宽 + 双层内边距(24 全包 + 24 底),
- *  这里复刻 MaterialAlertDialogBuilder 自定义视图的"刚刚好"。 */
+/** 关于 = Shizuku 同款极简弹窗(§9):图标纵跨右侧两行文字——上界对齐
+ *  第一行(应用名 + 裸版本号,同为 18sp 蓝字,两端对齐),下界对齐第二行
+ *  (源码链接行,浏览器打开);点空白关闭(无按钮,SAS 弹窗同款)。
+ *  第六批:裸 Dialog + 自适应宽度,复刻 MaterialAlertDialogBuilder 自定义
+ *  视图的"刚刚好";第七批:两行布局 + 图标跨行对齐(所有者指示)。 */
 @Composable
 fun AboutDialog(onDismiss: () -> Unit) {
     val context = LocalContext.current
@@ -92,29 +100,45 @@ fun AboutDialog(onDismiss: () -> Unit) {
             shape = AlertDialogDefaults.shape,
             color = AlertDialogDefaults.containerColor,
         ) {
+            /* height(IntrinsicSize.Min):行高 = 两行文字的内蕴高度,
+             * 图标 fillMaxHeight + 等比 → 上界恰贴第一行、下界恰贴第二行 */
             Row(
-                /* 图标顶部对齐名称/版本块(同 Shizuku 的 LinearLayout 默认顶对齐,
-                 * 真机反馈:不要居中) */
-                verticalAlignment = Alignment.Top,
-                modifier = Modifier.padding(24.dp),
+                modifier = Modifier
+                    .padding(24.dp)
+                    .height(IntrinsicSize.Min),
             ) {
-                Image(icon, contentDescription = null, modifier = Modifier.size(40.dp))
+                Image(
+                    icon,
+                    contentDescription = null,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .aspectRatio(1f),
+                )
                 Column(
-                    modifier = Modifier.padding(start = 24.dp),
-                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                    modifier = Modifier
+                        .padding(start = 24.dp)
+                        .width(IntrinsicSize.Max),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    Text(
-                        stringResource(R.string.app_name),
-                        fontSize = 18.sp,
-                    )
-                    Text(version, style = MaterialTheme.typography.bodyMedium)
+                    /* 第一行:应用名(左对齐蓝字)+ 版本号(右对齐蓝字) */
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(
+                            stringResource(R.string.app_name),
+                            fontSize = 18.sp,
+                            color = accentBlue(),
+                        )
+                        Text(version, fontSize = 18.sp, color = accentBlue())
+                    }
+                    /* 第二行:源码链接(维持原样) */
                     Text(
                         stringResource(R.string.about_source_code),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier
-                            .padding(top = 8.dp)
-                            .clickable { openRepo(context) },
+                        modifier = Modifier.clickable { openRepo(context) },
                     )
                 }
             }

@@ -21,7 +21,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -72,7 +71,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -100,11 +98,6 @@ import java.util.Date
  *  28 / 69 / 144 / 280 / 528 / 978 字。无默认档——开启必从列表选档,
  *  关闭时分割 = 单片上限(非混淆,不受本表影响)。须为 4 的倍数。 */
 private val PAD_THRESHOLDS = intArrayOf(200, 364, 664, 1208, 2200, 4000)
-
-/** 菜单当前值强调色:固定蓝(所有者指示),深浅主题各取一档保证对比度。 */
-@Composable
-private fun menuValueColor(): Color =
-    if (isSystemInDarkTheme()) Color(0xFF90CAF9) else Color(0xFF1976D2)
 
 /** 对话屏:五个动作全部一键化(§5),KPI = 平文 + 1 步。 */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -376,7 +369,7 @@ fun ChatScreen(
                                             stringResource(R.string.padding_off)
                                         },
                                         style = MaterialTheme.typography.labelMedium,
-                                        color = menuValueColor(),
+                                        color = accentBlue(),
                                     )
                                     Icon(
                                         Icons.Default.ArrowDropDown,
