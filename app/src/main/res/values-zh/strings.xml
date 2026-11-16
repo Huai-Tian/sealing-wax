@@ -25,7 +25,7 @@
     <!-- pairing -->
     <string name="pair_new_title">新建会话</string>
     <string name="pair_join_title">加入会话</string>
-    <string name="pair_secret_hint">输入一句只有你们俩知道的话(共同经历、地点、事件)。\n两人必须一字不差;不要用在网上聊过的话题——服务器存档即失效。</string>
+    <string name="pair_secret_hint">暗号应不易被猜到,请勿在聊天软件中发送。</string>
     <string name="pair_step1">第一步:和对方约好同一个暗号</string>
     <string name="pair_secret_label">暗号</string>
     <string name="pair_invite_btn">生成邀请码</string>
@@ -40,7 +40,6 @@
     <string name="pair_state_error_new">配对流程状态错误</string>
     <string name="pair_fail_new">配对失败</string>
     <string name="pair_paste_invite">粘贴对方发来的邀请码</string>
-    <string name="pair_secret_same">暗号(和对方相同)</string>
     <string name="pair_invite_bad_format">这不是有效的邀请码(长度不符)</string>
     <string name="pair_invite_crypto">邀请码无法解算</string>
     <string name="pair_state_error_join">加入流程状态错误</string>
@@ -91,7 +90,7 @@
 
     <!-- chat: SAS dialog -->
     <string name="sas_dialog_title">身份验证码</string>
-    <string name="sas_dialog_hint">电话念码、当面扫码,或点击数字复制。\n对不上 = 立即中止会话。</string>
+    <string name="sas_dialog_hint">两端的 9 位数字应完全一致,对不上则存在中间人监听。</string>
     <string name="sas_copied_toast">验证码已复制</string>
 
     <!-- chat: save-or-discard -->
@@ -109,7 +108,6 @@
     <!-- components -->
     <string name="qr_sas_cd">SAS 二维码</string>
     <string name="rename_title">重命名会话</string>
-    <string name="rename_hint">命名的对象是会话(一把钥匙),不是联系人。</string>
 
     <!-- errors (stable-code display, §9: localized prefix + SWX_E_* code;
          internal exception details go to logs, never on screen) -->

@@ -241,8 +241,7 @@ fun JoinSessionScreen(
                     value = secret,
                     onValueChange = { secret = it },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text(stringResource(R.string.pair_secret_same)) },
-                    supportingText = { Text(stringResource(R.string.pair_secret_hint)) },
+                    label = { Text(stringResource(R.string.pair_secret_label)) },
                     singleLine = true,
                     trailingIcon = { ClearFieldIcon(secret) { secret = "" } },
                 )

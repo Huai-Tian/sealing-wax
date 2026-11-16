@@ -26,7 +26,7 @@
     <!-- pairing -->
     <string name="pair_new_title">New session</string>
     <string name="pair_join_title">Join session</string>
-    <string name="pair_secret_hint">Type something only the two of you know (a shared experience, place, event).\nBoth must match exactly; never use a topic you\'ve discussed online — server archives would break it.</string>
+    <string name="pair_secret_hint">Use a passphrase that\'s hard to guess, and never send it through the IM.</string>
     <string name="pair_step1">Step 1: agree on a passphrase with the other side</string>
     <string name="pair_secret_label">Passphrase</string>
     <string name="pair_invite_btn">Generate invite code</string>
@@ -41,7 +41,6 @@
     <string name="pair_state_error_new">Pairing state error</string>
     <string name="pair_fail_new">Pairing failed</string>
     <string name="pair_paste_invite">Paste the invite code the other side sent</string>
-    <string name="pair_secret_same">Passphrase (same as theirs)</string>
     <string name="pair_invite_bad_format">Not a valid invite code (wrong length)</string>
     <string name="pair_invite_crypto">The invite code cannot be solved</string>
     <string name="pair_state_error_join">Join state error</string>
@@ -94,7 +93,7 @@
 
     <!-- chat: SAS dialog -->
     <string name="sas_dialog_title">Verification number</string>
-    <string name="sas_dialog_hint">Read it over a call, scan in person, or tap the digits to copy.\nIf they don\'t match, stop the session immediately.</string>
+    <string name="sas_dialog_hint">Both ends must show the same 9 digits; a mismatch means someone is listening in.</string>
     <string name="sas_copied_toast">Verification number copied</string>
 
     <!-- chat: save-or-discard -->
@@ -114,7 +113,6 @@
     <!-- components -->
     <string name="qr_sas_cd">SAS QR code</string>
     <string name="rename_title">Rename session</string>
-    <string name="rename_hint">You\'re naming a session (a key), not a contact.</string>
 
     <!-- errors (stable-code display, §9: localized prefix + SWX_E_* code;
          internal exception details go to logs, never on screen) -->

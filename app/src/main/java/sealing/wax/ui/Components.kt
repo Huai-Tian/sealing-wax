@@ -185,7 +185,6 @@ fun RenameSessionDialog(
         title = { Text(stringResource(R.string.rename_title)) },
         text = {
             Column {
-                Text(stringResource(R.string.rename_hint))
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },

@@ -544,11 +544,6 @@ fun ChatScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text(
-                        stringResource(R.string.sas_dialog_hint),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                    )
                     SasDigits(
                         sas,
                         Modifier.clickable {
@@ -561,6 +556,13 @@ fun ChatScreen(
                         },
                     )
                     QrCode(content = sas)
+                    /* 红字提示在二维码下方(第十批):标准+违约后果一句收束,
+                     * 核对方法与点击复制说明撤除(点击行为保留,Toast 反馈) */
+                    Text(
+                        stringResource(R.string.sas_dialog_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
                 }
             },
             /* M3 要求 confirmButton 必传;空槽 = 无按钮,点空白关闭 */
