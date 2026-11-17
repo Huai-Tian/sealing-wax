@@ -1,10 +1,8 @@
 # Language statistics (GitHub Linguist).
 # Vendored third-party crypto sources — upstream libsodium and the spake2-c
-# port of BoringSSL SPAKE2 (see app/src/main/cpp/spake2/README.md). They are
-# library references, not project code; the in-house sha512 shim stays counted.
+# port of BoringSSL SPAKE2 (see app/src/main/cpp/spake2/README.md). Library
+# references, not project code.
 app/src/main/cpp/libsodium/** linguist-vendored
 app/src/main/cpp/spake2/** linguist-vendored
-app/src/main/cpp/spake2/sha512.c -linguist-vendored
-app/src/main/cpp/spake2/sha512.h -linguist-vendored
 # Host-only C test suite (CTest); never shipped in the APK.
 app/src/main/cpp/tests/** linguist-vendored
