@@ -35,9 +35,7 @@
     <string name="pair_invite_code">Invite code</string>
     <string name="pair_step3">Step 3: paste the other side\'s reply code</string>
     <string name="pair_reply_label">Reply code</string>
-    <string name="pair_complete_btn">Finish pairing</string>
     <string name="pair_reply_bad_format">Not a valid reply code (wrong length)</string>
-    <string name="pair_reply_crypto">Passphrase mismatch, or the reply code was altered. Check the passphrase with the other side, then have them regenerate the reply code with the same passphrase (the invite code needn\'t be resent)</string>
     <string name="pair_state_error_new">Pairing state error</string>
     <string name="pair_fail_new">Pairing failed</string>
     <string name="pair_paste_invite">Paste the invite code the other side sent</string>
@@ -58,7 +56,7 @@
     <string name="public_name_label">Name</string>
     <string name="public_create_btn">Create public session</string>
     <string name="public_static_code">Static invite code</string>
-    <string name="public_reply_crypto">Passphrase mismatch</string>
+    <string name="pair_reply_mismatch">Passphrase mismatch</string>
     <string name="public_delete_title">Delete public session</string>
     <string name="public_delete_text">After deletion, no one can pair with you via this public session\'s static invite code; established sessions are unaffected.</string>
 

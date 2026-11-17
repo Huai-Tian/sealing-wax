@@ -38,6 +38,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -75,6 +76,31 @@ fun NewSessionScreen(
      * 第一步的形态与按钮去向;普通配对流程一字不动 */
     var publicMode by remember { mutableStateOf(false) }
     var name by remember { mutableStateOf("") }
+
+    /* 粘贴即配对(运营打磨批2,参考运营屏):[完成配对]按钮移除,第三步
+     * 与公共会话同款——150ms 防抖,长度即格式,裁决在 finish;错误文案
+     * 与运营屏同串(长度不符/暗号不一致) */
+    LaunchedEffect(reply, invite) {
+        val t = reply.trim()
+        if (invite == null || t.isEmpty()) return@LaunchedEffect
+        kotlinx.coroutines.delay(150)
+        if (t.length != 88) {
+            error = context.getString(R.string.pair_reply_bad_format)
+            return@LaunchedEffect
+        }
+        runCatching { SessionManager.completeInvite(t) }
+            .onSuccess { onPaired() }
+            .onFailure { e ->
+                Log.w("SealingWax", "completeInvite failed", e)
+                error = when (e.message) {
+                    "SWX_E_CRYPTO" -> context.getString(R.string.pair_reply_mismatch)
+                    "SWX_E_STATE" -> context.getString(R.string.pair_state_error_new)
+                    else -> SessionManager.stableError(
+                        context.getString(R.string.pair_fail_new), e,
+                    )
+                }
+            }
+    }
 
     Scaffold(
         topBar = {
@@ -211,26 +237,6 @@ fun NewSessionScreen(
                     trailingIcon = { ClearFieldIcon(reply) { reply = "" } },
                 )
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                Button(
-                    onClick = {
-                        try {
-                            SessionManager.completeInvite(reply)
-                            onPaired()
-                        } catch (e: IllegalStateException) {
-                            Log.w("SealingWax", "completeInvite failed", e)
-                            error = when (e.message) {
-                                "SWX_E_FORMAT" -> context.getString(R.string.pair_reply_bad_format)
-                                "SWX_E_CRYPTO" -> context.getString(R.string.pair_reply_crypto)
-                                "SWX_E_STATE" -> context.getString(R.string.pair_state_error_new)
-                                else -> SessionManager.stableError(
-                                    context.getString(R.string.pair_fail_new), e,
-                                )
-                            }
-                        }
-                    },
-                    enabled = reply.isNotBlank(),
-                    modifier = Modifier.fillMaxWidth(),
-                ) { Text(stringResource(R.string.pair_complete_btn)) }
             }
             Spacer(Modifier.height(32.dp))
         }

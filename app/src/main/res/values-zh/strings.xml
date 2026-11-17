@@ -34,9 +34,7 @@
     <string name="pair_invite_code">邀请码</string>
     <string name="pair_step3">第三步:粘贴对方的回复码</string>
     <string name="pair_reply_label">回复码</string>
-    <string name="pair_complete_btn">完成配对</string>
     <string name="pair_reply_bad_format">这不是有效的回复码(长度不符)</string>
-    <string name="pair_reply_crypto">暗号不一致或回复码被改动。和对方核对暗号后,请对方用同一个暗号重新生成回复码(邀请码不用重发)</string>
     <string name="pair_state_error_new">配对流程状态错误</string>
     <string name="pair_fail_new">配对失败</string>
     <string name="pair_paste_invite">粘贴对方发来的邀请码</string>
@@ -56,7 +54,7 @@
     <string name="public_name_label">名称</string>
     <string name="public_create_btn">创建公共会话</string>
     <string name="public_static_code">静态邀请码</string>
-    <string name="public_reply_crypto">暗号不一致</string>
+    <string name="pair_reply_mismatch">暗号不一致</string>
     <string name="public_delete_title">删除公共会话</string>
     <string name="public_delete_text">删除后其他人无法再根据此公共会话的静态邀请码与你配对,已建立的会话不受影响。</string>
 

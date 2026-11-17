@@ -96,7 +96,7 @@ fun PublicSessionScreen(
             .onFailure { e ->
                 Log.w("SealingWax", "completeInvite failed", e)
                 error = when (e.message) {
-                    "SWX_E_CRYPTO" -> context.getString(R.string.public_reply_crypto)
+                    "SWX_E_CRYPTO" -> context.getString(R.string.pair_reply_mismatch)
                     "SWX_E_STATE" -> context.getString(R.string.pair_state_error_new)
                     else -> SessionManager.stableError(
                         context.getString(R.string.pair_fail_new), e,
