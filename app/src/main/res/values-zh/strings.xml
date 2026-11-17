@@ -71,10 +71,10 @@
     <string name="padding_off">关闭</string>
 
     <!-- chat: input bar -->
-    <string name="input_label">明文,或粘贴来自聊天软件的密文</string>
+    <string name="input_label">明文,或粘贴密文</string>
     <string name="plus_cd">发文件等入口</string>
     <string name="seal_cd">加密并复制</string>
-    <string name="sealed_toast_one">已加密并复制,去聊天软件粘贴</string>
+    <string name="sealed_toast_one">已加密并复制</string>
     <string name="sealed_toast_many">已加密 %1$d 片并全部复制,一次粘贴即可</string>
     <string name="tile_send">发文件</string>
     <string name="tile_receive">收文件</string>
