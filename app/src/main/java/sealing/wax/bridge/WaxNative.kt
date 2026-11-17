@@ -101,6 +101,7 @@ object WaxNative {
 
     /** [counter, chunkIndex, totalChunks] of the last frame. */
     external fun lastFrame(h: Long): LongArray
+    external fun reasmState(h: Long): LongArray
 
     /** Streaming BLAKE2b-256 over the whole .swx (ledger hash, §7). */
     external fun hashCreate(): Long

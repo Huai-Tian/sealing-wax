@@ -273,6 +273,38 @@ public class JniSmoke {
         byte[] bigBack = WaxNative.openText(b, mp[2]);
         check(java.util.Arrays.equals(bigBack, big), "multipiece roundtrip");
 
+        /* out-of-order reassembly (对号入座式组装,2026-11): same-fingerprint
+         * in-flight pieces fill their slots in any arrival order (arrival
+         * 3,1,4,2 here); reasmState reports honest progress; a piece of the
+         * completed message REPLAYs (cross-message hwm unchanged) */
+        {
+            StringBuilder oos = new StringBuilder();
+            for (int i = 0; i < 3000; i++) oos.append('序');  /* 9000 B → 4 */
+            byte[] ooMsg = oos.toString().getBytes("UTF-8");
+            String[] op = WaxNative.sealText(a, ooMsg);
+            check(op.length == 4, "oo piece count " + op.length);
+            check(WaxNative.openText(b, op[2]) == null, "oo: piece 3 partial");
+            long[] rs = WaxNative.reasmState(b);
+            check(rs[0] == 1 && rs[1] == 4, "oo reasm 1/4: " + rs[0] + "/" + rs[1]);
+            check(WaxNative.openText(b, op[0]) == null, "oo: piece 1 partial");
+            rs = WaxNative.reasmState(b);
+            check(rs[0] == 2 && rs[1] == 4, "oo reasm 2/4: " + rs[0] + "/" + rs[1]);
+            check(WaxNative.openText(b, op[3]) == null, "oo: piece 4 partial");
+            rs = WaxNative.reasmState(b);
+            check(rs[0] == 3 && rs[1] == 4, "oo reasm 3/4: " + rs[0] + "/" + rs[1]);
+            byte[] ooBack = WaxNative.openText(b, op[1]);  /* last slot assembles */
+            check(java.util.Arrays.equals(ooBack, ooMsg), "oo assembles byte-exact");
+            rs = WaxNative.reasmState(b);
+            check(rs[0] == 0 && rs[1] == 0, "oo reasm idle");
+            try {
+                WaxNative.openText(b, op[2]);
+                check(false, "completed-message piece must REPLAY");
+            } catch (IllegalStateException e) {
+                check("SWX_E_REPLAY".equals(e.getMessage()),
+                      "oo replay code " + e.getMessage());
+            }
+        }
+
         /* padding on sender */
         WaxNative.setPadding(a, true, 1000);
         String[] padded = WaxNative.sealText(a, "hi".getBytes("UTF-8"));

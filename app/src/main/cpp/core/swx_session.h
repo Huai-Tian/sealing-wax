@@ -171,6 +171,13 @@ int swx_session_open_file_frame(swx_session *s,
 
 /* ---- last-frame introspection (non-secret; for platform bookkeeping) ---- */
 
+/* In-flight logical message reassembly progress (§4): pieces accepted vs
+ * total for the message currently being reassembled — out-of-order aware,
+ * unlike last_frame which reports the frame index of the last arrival.
+ * 0/0 when idle. For the honest "已收 x/N" hint. */
+int swx_session_reasm_state(const swx_session *s,
+                            uint32_t *got, uint32_t *total);
+
 int swx_session_last_frame(const swx_session *s,
                            uint8_t fp_out[SWX_FINGERPRINT_LEN],
                            uint64_t *counter, uint32_t *chunk_index,

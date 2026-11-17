@@ -366,9 +366,11 @@ object SessionManager {
                 return OpenResult.Complete(msg)
             }
         }
-        val lf = runCatching { WaxNative.lastFrame(handle) }.getOrNull()
-        return if (lf != null && lf[2] > 1) {
-            OpenResult.Partial((lf[1] + 1).toInt(), lf[2].toInt())
+        /* 重组进度如实化(乱序感知):用重组器的已收片数而非 lastFrame
+         * 片序(乱序粘贴时后者虚报——收 1,2,4 显示"4/4"实则缺第 3 片) */
+        val rs = runCatching { WaxNative.reasmState(handle) }.getOrNull()
+        return if (rs != null && rs[1] > 1 && rs[0] < rs[1]) {
+            OpenResult.Partial(rs[0].toInt(), rs[1].toInt())
         } else {
             OpenResult.Failure(str(R.string.pieces_pending))
         }

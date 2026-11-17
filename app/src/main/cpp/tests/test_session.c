@@ -366,20 +366,32 @@ static int test_text_multipiece(void)
     swx_session_counters(b, &sn, &hwm);
     CHECK(hwm == 3);
 
-    /* strict high-water: pasting an earlier piece after a later one is
-     * rejected (§4 "旧号拒收"); reassembly never yields wrong plaintext */
+    /* out-of-order reassembly (2026-11 对号入座式组装,所有者指示):
+     * in-flight pieces of the same fingerprint bypass the counter hwm
+     * and fill their slots in any order; a piece of the COMPLETED
+     * message REPLAYs once the reassembler is idle again (cross-message
+     * replay defense unchanged) */
     {
         swx_session *c = NULL, *d = NULL;
+        uint32_t got = 99, total = 99;
         CHECK(pair(&c, &d) == 0);
         CHECK(swx_session_seal_text(c, pt, sizeof pt, NULL,
                                     (char *) pieces, PIECE_STRIDE, MAX_PIECES,
                                     &np) == SWX_OK);
         CHECK(open_b64(d, pieces[1], out, sizeof out, &out_len)
               == SWX_E_PARTIAL);
+        CHECK(swx_session_reasm_state(d, &got, &total) == SWX_OK);
+        CHECK(got == 1 && total == 3);        /* honest progress, not idx+1 */
         CHECK(open_b64(d, pieces[0], out, sizeof out, &out_len)
-              == SWX_E_REPLAY);               /* counter 1 <= hwm 2 */
+              == SWX_E_PARTIAL);              /* slot fill, hwm-exempt */
         CHECK(open_b64(d, pieces[2], out, sizeof out, &out_len)
-              == SWX_E_PARTIAL);              /* piece 1 lost: incomplete */
+              == SWX_OK);                     /* assembles out of order */
+        CHECK(out_len == sizeof pt);
+        CHECK(memcmp(out, pt, out_len) == 0);
+        CHECK(swx_session_reasm_state(d, &got, &total) == SWX_OK);
+        CHECK(got == 0 && total == 0);        /* idle after assembly */
+        CHECK(open_b64(d, pieces[1], out, sizeof out, &out_len)
+              == SWX_E_REPLAY);               /* completed: idle reasm */
         swx_session_free(c);
         swx_session_free(d);
     }

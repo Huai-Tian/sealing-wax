@@ -626,6 +626,26 @@ Java_sealing_wax_bridge_WaxNative_lastFrame(JNIEnv *env, jclass, jlong h)
     return arr;
 }
 
+extern "C" JNIEXPORT jlongArray JNICALL
+Java_sealing_wax_bridge_WaxNative_reasmState(JNIEnv *env, jclass, jlong h)
+{
+    uint32_t got = 0, total = 0;
+    jlong out[2];
+    int ret = swx_session_reasm_state((const swx_session *) (intptr_t) h,
+                                      &got, &total);
+    if (ret != SWX_OK) {
+        throw_swx(env, ret);
+        return NULL;
+    }
+    out[0] = (jlong) got;
+    out[1] = (jlong) total;
+    jlongArray arr = env->NewLongArray(2);
+    if (arr != NULL) {
+        env->SetLongArrayRegion(arr, 0, 2, out);
+    }
+    return arr;
+}
+
 /* ---- ledger hash ---- */
 
 extern "C" JNIEXPORT jlong JNICALL

@@ -774,7 +774,16 @@ static int open_data(swx_session *s, uint8_t want_type,
         return SWX_E_TYPE;
     }
     if (v.counter <= s->recv_hwm) {
-        return SWX_E_REPLAY;
+        /* 乱序补片豁免(2026-11,所有者指示"对号入座式组装"):同指纹的
+         * 进行中消息放行到认证与槽位查重——重放已收片由 have[idx] 拒,
+         * 旧消息片(指纹不同/重组器空闲)仍 REPLAY,高水位的消息间防重放
+         * 不变;伪造帧无密钥过不了 AEAD(密钥绑定 counter+AAD 绑定
+         * 指纹/片序)。逐片交付把粘贴顺序交给了用户,乱序从边缘变常态。 */
+        const swx_reasm *r = s->reasm;
+        if (r == NULL || r->total == 0 || r->got >= r->total ||
+            memcmp(r->fp, v.fingerprint, SWX_FINGERPRINT_LEN) != 0) {
+            return SWX_E_REPLAY;
+        }
     }
     if (v.ct_len > SWX_FILE_PIECE_DEFAULT + SWX_TAG_LEN ||
         v.ct_len < SWX_TAG_LEN || pt_cap < v.ct_len - SWX_TAG_LEN) {
@@ -793,8 +802,14 @@ static int open_data(swx_session *s, uint8_t want_type,
         return SWX_E_CRYPTO;
     }
 
-    /* authentic frame: advance high-water and record bookkeeping */
-    s->recv_hwm = v.counter;
+    /* authentic frame: advance high-water and record bookkeeping.
+     * max semantics: out-of-order pieces admitted via the in-flight
+     * exemption carry a lower counter than the hwm already reached —
+     * they must never pull it back (a regressed hwm would let replays
+     * of higher-counter pieces slip past the gate). */
+    if (v.counter > s->recv_hwm) {
+        s->recv_hwm = v.counter;
+    }
     memcpy(s->last_fp, v.fingerprint, SWX_FINGERPRINT_LEN);
     s->last_counter = v.counter;
     s->last_idx = v.chunk_index;
@@ -872,6 +887,25 @@ int swx_session_open_file_frame(swx_session *s,
     uint8_t hdr[SWX_DATA_FIXED_LEN];
     return open_data(s, SWX_TYPE_FILE, wire, wire_len, fp_out, NULL,
                      hdr, pt_out, pt_cap, pt_len);
+}
+
+int swx_session_reasm_state(const swx_session *s,
+                            uint32_t *got, uint32_t *total)
+{
+    const swx_reasm *r;
+
+    if (s == NULL || got == NULL || total == NULL) {
+        return SWX_E_ARG;
+    }
+    r = s->reasm;
+    if (r == NULL || r->total == 0) {
+        *got = 0;
+        *total = 0;
+        return SWX_OK;
+    }
+    *got = r->got;
+    *total = r->total;
+    return SWX_OK;
 }
 
 int swx_session_last_frame(const swx_session *s,

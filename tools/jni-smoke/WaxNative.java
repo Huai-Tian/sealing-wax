@@ -27,6 +27,7 @@ public class WaxNative {
     public static native byte[] openFileFrame(long h, byte[] wire);
     public static native byte[] lastFp(long h);
     public static native long[] lastFrame(long h);
+    public static native long[] reasmState(long h);
     public static native long hashCreate();
     public static native void hashUpdate(long h, byte[] data, int offset, int len);
     public static native byte[] hashFinal(long h);
