@@ -936,9 +936,14 @@ void SPAKE2_CTX_free(struct spake2_ctx_st *ctx) {
   free(ctx);
 }
 
-int SPAKE2_generate_msg(struct spake2_ctx_st *ctx, uint8_t *out, size_t *out_len,
-                         size_t max_out_len, const uint8_t *password,
-                         size_t password_len) {
+/* 火漆 integration change #5 (公共会话): seed != NULL replaces the CSPRNG
+ * draw with the caller's 64 bytes and routes them through the identical
+ * sc_reduce + cofactor pipeline — upstream math untouched, so a seeded run
+ * is byte-equivalent to a CSPRNG run that happened to draw |seed|. */
+static int spake2_generate_msg(struct spake2_ctx_st *ctx, uint8_t *out,
+                               size_t *out_len, size_t max_out_len,
+                               const uint8_t *password, size_t password_len,
+                               const uint8_t seed[64]) {
   if (ctx->state != spake2_state_init) {
     return 0;
   }
@@ -949,7 +954,11 @@ int SPAKE2_generate_msg(struct spake2_ctx_st *ctx, uint8_t *out, size_t *out_len
 
   uint8_t private_tmp[64];
   /* 火漆: CSPRNG (upstream port used libc rand(); BoringSSL uses RAND_bytes) */
-  randombytes_buf(private_tmp, sizeof(private_tmp));
+  if (seed != NULL) {
+    memcpy(private_tmp, seed, sizeof(private_tmp));
+  } else {
+    randombytes_buf(private_tmp, sizeof(private_tmp));
+  }
 
   x25519_sc_reduce(private_tmp);
   // Multiply by the cofactor (eight) so that we'll clear it when operating on
@@ -1040,6 +1049,31 @@ int SPAKE2_generate_msg(struct spake2_ctx_st *ctx, uint8_t *out, size_t *out_len
   ctx->state = spake2_state_msg_generated;
 
   return 1;
+}
+
+int SPAKE2_generate_msg(struct spake2_ctx_st *ctx, uint8_t *out, size_t *out_len,
+                         size_t max_out_len, const uint8_t *password,
+                         size_t password_len) {
+  return spake2_generate_msg(ctx, out, out_len, max_out_len, password,
+                             password_len, NULL);
+}
+
+/* 火漆 integration change #5 (公共会话/静态邀请码): deterministic variant.
+ * |seed| replaces the private-scalar CSPRNG draw; the same (seed, password)
+ * reproduces a byte-identical share on every call. Callers MUST supply 64B
+ * CSPRNG output captured once at gate creation and MUST NOT derive the seed
+ * from the password — a password-derived scalar would turn 暗号 leakage into
+ * full impersonation of this side. Security: the SPAKE2 proof requires the
+ * scalar to be uniform and secret, never fresh; seeded draws preserve both. */
+int SPAKE2_generate_msg_seeded(struct spake2_ctx_st *ctx, uint8_t *out,
+                               size_t *out_len, size_t max_out_len,
+                               const uint8_t *password, size_t password_len,
+                               const uint8_t seed[64]) {
+  if (seed == NULL) {
+    return 0;
+  }
+  return spake2_generate_msg(ctx, out, out_len, max_out_len, password,
+                             password_len, seed);
 }
 
 static void update_with_length_prefix(struct sha512_ctx *sha, const uint8_t *data, const size_t len) {

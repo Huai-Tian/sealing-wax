@@ -145,6 +145,90 @@ static int test_corrupt_bits(void)
     return 0;
 }
 
+/* 火漆 integration change #5 (公共会话/静态邀请码): the seeded variant must
+ * be byte-deterministic per (seed, password) and must pair normally with a
+ * standard responder — a seeded run is equivalent to a CSPRNG run that
+ * happened to draw |seed|. */
+static int test_seeded_determinism(void)
+{
+    static const uint8_t SEED[64] = {
+        0x37, 0x0a, 0x5e, 0xc2, 0x91, 0x4d, 0xb8, 0x66,
+        0xf3, 0x1d, 0x7a, 0x09, 0xd4, 0x8b, 0x2c, 0x50,
+        0xe6, 0x19, 0xaf, 0x73, 0x02, 0x9c, 0x48, 0xbe,
+        0x65, 0xf1, 0x30, 0x8a, 0xd7, 0x4b, 0x2e, 0x96,
+        0x71, 0x0d, 0xca, 0x58, 0x23, 0xb9, 0x04, 0x6e,
+        0xe2, 0x97, 0x3a, 0x51, 0xc8, 0x06, 0x74, 0x1b,
+        0x9d, 0x42, 0xa5, 0x30, 0x86, 0xf9, 0x63, 0x2b,
+        0x14, 0xdc, 0x79, 0x05, 0xba, 0x38, 0x91, 0x60,
+    };
+    uint8_t m1[32], m2[32], mr[32], bm[32], ak[64], bk[64];
+    size_t n = 0, ka = 0, kb = 0;
+    struct spake2_ctx_st *a1 = SPAKE2_CTX_new(spake2_role_alice,
+                                             NAME_A, sizeof NAME_A - 1,
+                                             NAME_B, sizeof NAME_B - 1);
+    struct spake2_ctx_st *a2 = SPAKE2_CTX_new(spake2_role_alice,
+                                             NAME_A, sizeof NAME_A - 1,
+                                             NAME_B, sizeof NAME_B - 1);
+    struct spake2_ctx_st *ar = NULL, *b = NULL;
+
+    CHECK(a1 != NULL && a2 != NULL);
+    CHECK(SPAKE2_generate_msg_seeded(a1, m1, &n, SPAKE2_MAX_MSG_SIZE,
+                                     (const uint8_t *) "password", 8,
+                                     SEED) == 1);
+    CHECK(SPAKE2_generate_msg_seeded(a2, m2, &n, SPAKE2_MAX_MSG_SIZE,
+                                     (const uint8_t *) "password", 8,
+                                     SEED) == 1);
+    CHECK(memcmp(m1, m2, 32) == 0);          /* deterministic share */
+    SPAKE2_CTX_free(a1);
+    SPAKE2_CTX_free(a2);
+
+    /* a different seed must yield a different share */
+    ar = SPAKE2_CTX_new(spake2_role_alice,
+                        NAME_A, sizeof NAME_A - 1, NAME_B, sizeof NAME_B - 1);
+    CHECK(ar != NULL);
+    CHECK(SPAKE2_generate_msg_seeded(ar, mr, &n, SPAKE2_MAX_MSG_SIZE,
+                                     (const uint8_t *) "password", 8,
+                                     SEED) == 1);
+    /* vary one seed byte via a local copy */
+    {
+        uint8_t alt[64];
+        struct spake2_ctx_st *ax = NULL;
+        memcpy(alt, SEED, sizeof alt);
+        alt[0] ^= 0x01;
+        ax = SPAKE2_CTX_new(spake2_role_alice,
+                            NAME_A, sizeof NAME_A - 1,
+                            NAME_B, sizeof NAME_B - 1);
+        CHECK(ax != NULL);
+        CHECK(SPAKE2_generate_msg_seeded(ax, m2, &n, SPAKE2_MAX_MSG_SIZE,
+                                         (const uint8_t *) "password", 8,
+                                         alt) == 1);
+        CHECK(memcmp(mr, m2, 32) != 0);
+        SPAKE2_CTX_free(ax);
+    }
+
+    /* the seeded share pairs normally with a standard responder */
+    b = SPAKE2_CTX_new(spake2_role_bob,
+                       NAME_B, sizeof NAME_B - 1, NAME_A, sizeof NAME_A - 1);
+    CHECK(b != NULL);
+    CHECK(SPAKE2_generate_msg(b, bm, &n, SPAKE2_MAX_MSG_SIZE,
+                              (const uint8_t *) "password", 8) == 1);
+    CHECK(SPAKE2_process_msg(ar, ak, &ka, 64, bm, 32) == 1);
+    CHECK(SPAKE2_process_msg(b, bk, &kb, 64, mr, 32) == 1);
+    CHECK(memcmp(ak, bk, 64) == 0);          /* keys agree */
+    SPAKE2_CTX_free(ar);
+    SPAKE2_CTX_free(b);
+
+    /* discipline: NULL seed is an explicit error, never a CSPRNG fallback */
+    a1 = SPAKE2_CTX_new(spake2_role_alice,
+                        NAME_A, sizeof NAME_A - 1, NAME_B, sizeof NAME_B - 1);
+    CHECK(a1 != NULL);
+    CHECK(SPAKE2_generate_msg_seeded(a1, m1, &n, SPAKE2_MAX_MSG_SIZE,
+                                     (const uint8_t *) "password", 8,
+                                     NULL) == 0);
+    SPAKE2_CTX_free(a1);
+    return 0;
+}
+
 int main(void)
 {
     CHECK(sodium_init() >= 0);
@@ -152,6 +236,7 @@ int main(void)
     CHECK(test_wrong_password() == 0);
     CHECK(test_wrong_names() == 0);
     CHECK(test_corrupt_bits() == 0);
+    CHECK(test_seeded_determinism() == 0);
     if (failures == 0) {
         printf("test_spake2: all passed\n");
         return 0;

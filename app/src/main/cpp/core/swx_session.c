@@ -287,8 +287,10 @@ static int secret_check(const uint8_t *secret, size_t secret_len)
     return SWX_OK;
 }
 
-int swx_session_invite(swx_session *s,
+/* seed == NULL → CSPRNG draw (普通配对); seed != NULL → 公共会话静态标量 */
+static int invite_impl(swx_session *s,
                        const uint8_t *secret, size_t secret_len,
+                       const uint8_t *seed,
                        uint8_t *out, size_t out_cap, size_t *out_len)
 {
     struct spake2_ctx_st *ctx;
@@ -311,12 +313,35 @@ int swx_session_invite(swx_session *s,
     if (ctx == NULL) {
         return SWX_E_STATE;
     }
-    if (SPAKE2_generate_msg(ctx, out, &n, SWX_PAIR_MSG_LEN,
-                            secret, secret_len) != 1) {
+    if (seed != NULL) {
+        if (SPAKE2_generate_msg_seeded(ctx, out, &n, SWX_PAIR_MSG_LEN,
+                                       secret, secret_len, seed) != 1) {
+            return SWX_E_CRYPTO;
+        }
+    } else if (SPAKE2_generate_msg(ctx, out, &n, SWX_PAIR_MSG_LEN,
+                                   secret, secret_len) != 1) {
         return SWX_E_CRYPTO;
     }
     *out_len = n;    /* SWX_PAIR_MSG_LEN */
     return SWX_OK;
+}
+
+int swx_session_invite(swx_session *s,
+                       const uint8_t *secret, size_t secret_len,
+                       uint8_t *out, size_t out_cap, size_t *out_len)
+{
+    return invite_impl(s, secret, secret_len, NULL, out, out_cap, out_len);
+}
+
+int swx_session_invite_seeded(swx_session *s,
+                              const uint8_t *secret, size_t secret_len,
+                              const uint8_t seed[SWX_GATE_SEED_LEN],
+                              uint8_t *out, size_t out_cap, size_t *out_len)
+{
+    if (seed == NULL) {
+        return SWX_E_ARG;
+    }
+    return invite_impl(s, secret, secret_len, seed, out, out_cap, out_len);
 }
 
 int swx_session_reply(swx_session *s,

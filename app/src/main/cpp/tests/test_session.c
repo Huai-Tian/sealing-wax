@@ -1314,11 +1314,190 @@ static int test_memory_discipline(void)
     return failures ? 1 : 0;
 }
 
+/* ---- 公共会话 (public session / 静态邀请码, §5) ---- */
+
+/* 固定测试种子:非零、非重复图案;生产种子是门禁创建时的一次性 CSPRNG
+ * 输出(平台层持久化,§6),绝不从暗号派生(§8)。 */
+static const uint8_t GATE_SEED[SWX_GATE_SEED_LEN] = {
+    0x37, 0x0a, 0x5e, 0xc2, 0x91, 0x4d, 0xb8, 0x66,
+    0xf3, 0x1d, 0x7a, 0x09, 0xd4, 0x8b, 0x2c, 0x50,
+    0xe6, 0x19, 0xaf, 0x73, 0x02, 0x9c, 0x48, 0xbe,
+    0x65, 0xf1, 0x30, 0x8a, 0xd7, 0x4b, 0x2e, 0x96,
+    0x71, 0x0d, 0xca, 0x58, 0x23, 0xb9, 0x04, 0x6e,
+    0xe2, 0x97, 0x3a, 0x51, 0xc8, 0x06, 0x74, 0x1b,
+    0x9d, 0x42, 0xa5, 0x30, 0x86, 0xf9, 0x63, 0x2b,
+    0x14, 0xdc, 0x79, 0x05, 0xba, 0x38, 0x91, 0x60,
+};
+
+static int test_public_invite_deterministic(void)
+{
+    swx_session *a = NULL, *b = NULL;
+    uint8_t x1[SWX_PAIR_MSG_LEN], x2[SWX_PAIR_MSG_LEN], xr[SWX_PAIR_MSG_LEN];
+    size_t n = 0;
+
+    /* 同种子 + 同暗号 → 恒等复现同一静态邀请码 */
+    CHECK(swx_session_create(&a, SWX_ROLE_INVITER) == SWX_OK);
+    CHECK(swx_session_invite_seeded(a, PAIR_SECRET, PAIR_SECRET_LEN,
+                                     GATE_SEED, x1, sizeof x1, &n)
+          == SWX_OK);
+    CHECK(n == SWX_PAIR_MSG_LEN);
+    CHECK(swx_session_create(&b, SWX_ROLE_INVITER) == SWX_OK);
+    CHECK(swx_session_invite_seeded(b, PAIR_SECRET, PAIR_SECRET_LEN,
+                                    GATE_SEED, x2, sizeof x2, &n) == SWX_OK);
+    CHECK(memcmp(x1, x2, sizeof x1) == 0);
+    swx_session_free(a);
+    swx_session_free(b);
+
+    /* 暗号变 → 静态码随 blinding 携带的 H(暗号) 同变(换锁 = 换码) */
+    CHECK(swx_session_create(&a, SWX_ROLE_INVITER) == SWX_OK);
+    CHECK(swx_session_invite_seeded(a, (const uint8_t *) "另一个暗号", 15,
+                                    GATE_SEED, xr, sizeof xr, &n) == SWX_OK);
+    CHECK(memcmp(x1, xr, sizeof x1) != 0);
+    swx_session_free(a);
+
+    /* 无种子的普通配对用临时标量,与静态码必然不同 */
+    CHECK(swx_session_create(&a, SWX_ROLE_INVITER) == SWX_OK);
+    CHECK(swx_session_invite(a, PAIR_SECRET, PAIR_SECRET_LEN,
+                             xr, sizeof xr, &n) == SWX_OK);
+    CHECK(memcmp(x1, xr, sizeof x1) != 0);
+    swx_session_free(a);
+
+    /* 入参纪律:应答方无邀请路径;NULL 种子显式拒绝 */
+    CHECK(swx_session_create(&b, SWX_ROLE_RESPONDER) == SWX_OK);
+    CHECK(swx_session_invite_seeded(b, PAIR_SECRET, PAIR_SECRET_LEN,
+                                    GATE_SEED, xr, sizeof xr, &n)
+          == SWX_E_STATE);
+    swx_session_free(b);
+    CHECK(swx_session_create(&a, SWX_ROLE_INVITER) == SWX_OK);
+    CHECK(swx_session_invite_seeded(a, PAIR_SECRET, PAIR_SECRET_LEN,
+                                    NULL, xr, sizeof xr, &n) == SWX_E_ARG);
+    swx_session_free(a);
+    return 0;
+}
+
+/* 两位客户先后用同一静态码配对:码恒等、会话钥匙互相独立(交叉解密必败)、
+ * SAS 各自新鲜——公共会话的核心安全性质(§5/§14) */
+static int test_public_pair_independence(void)
+{
+    swx_session *a1 = NULL, *b1 = NULL, *a2 = NULL, *b2 = NULL;
+    uint8_t inv1[SWX_PAIR_MSG_LEN], inv2[SWX_PAIR_MSG_LEN];
+    uint8_t rep[SWX_PAIR_REPLY_LEN];
+    char sas1[SWX_SAS_DIGITS + 1], sas2[SWX_SAS_DIGITS + 1];
+    const uint8_t msg[] = "给客户的私信";
+    char pieces[MAX_PIECES][PIECE_STRIDE];
+    uint32_t np = 0;
+    uint8_t out[SWX_TEXT_MAX_PT];
+    size_t out_len = 0, n = 0;
+
+    /* 客户 1 全流程 */
+    CHECK(swx_session_create(&a1, SWX_ROLE_INVITER) == SWX_OK);
+    CHECK(swx_session_invite_seeded(a1, PAIR_SECRET, PAIR_SECRET_LEN,
+                                    GATE_SEED, inv1, sizeof inv1, &n)
+          == SWX_OK);
+    CHECK(swx_session_create(&b1, SWX_ROLE_RESPONDER) == SWX_OK);
+    CHECK(swx_session_reply(b1, PAIR_SECRET, PAIR_SECRET_LEN,
+                            inv1, n, rep, sizeof rep, &n) == SWX_OK);
+    CHECK(swx_session_finish(a1, rep, n) == SWX_OK);
+    CHECK(swx_session_sas(a1, sas1) == SWX_OK);
+    CHECK(swx_session_sas(b1, sas2) == SWX_OK);
+    CHECK(strcmp(sas1, sas2) == 0);          /* 同一次配对双端一致 */
+
+    /* 再武装:同种子恒等复现同一静态码;客户 2 照常配对 */
+    CHECK(swx_session_create(&a2, SWX_ROLE_INVITER) == SWX_OK);
+    CHECK(swx_session_invite_seeded(a2, PAIR_SECRET, PAIR_SECRET_LEN,
+                                    GATE_SEED, inv2, sizeof inv2, &n)
+          == SWX_OK);
+    CHECK(memcmp(inv1, inv2, sizeof inv1) == 0);
+    CHECK(swx_session_create(&b2, SWX_ROLE_RESPONDER) == SWX_OK);
+    CHECK(swx_session_reply(b2, PAIR_SECRET, PAIR_SECRET_LEN,
+                            inv2, n, rep, sizeof rep, &n) == SWX_OK);
+    CHECK(swx_session_finish(a2, rep, n) == SWX_OK);
+    CHECK(swx_session_sas(a2, sas2) == SWX_OK);
+    CHECK(strcmp(sas1, sas2) != 0);          /* 每位客户 SAS 各自新鲜 */
+
+    /* 钥匙独立:a1→客户1 的密文,客户2 打不开;客户1 自己能开。
+     * 错会话的帧在传输掩码层即死——头被错钥匙解掩码出垃圾 magic,
+     * 连 AEAD 都到不了(E_FORMAT 早于 E_CRYPTO,§4 掩码设计) */
+    CHECK(swx_session_seal_text(a1, msg, sizeof msg, NULL,
+                                (char *) pieces, PIECE_STRIDE, MAX_PIECES,
+                                &np) == SWX_OK);
+    CHECK(np == 1);
+    CHECK(open_b64(b2, pieces[0], out, sizeof out, &out_len) == SWX_E_FORMAT);
+    CHECK(open_b64(b1, pieces[0], out, sizeof out, &out_len) == SWX_OK);
+    CHECK(out_len == sizeof msg && memcmp(out, msg, sizeof msg) == 0);
+
+    swx_session_free(a1);
+    swx_session_free(b1);
+    swx_session_free(a2);
+    swx_session_free(b2);
+    return 0;
+}
+
+/* 错误暗号的回复不消耗武装(3ee0222 回滚对静态码同样成立);拿着
+ * 别的门的静态码来配也自然拒绝(旧码/错码在 finish 裁决) */
+static int test_public_reject_and_rearm(void)
+{
+    swx_session *gate = NULL, *client = NULL;
+    uint8_t inv[SWX_PAIR_MSG_LEN], inv_other[SWX_PAIR_MSG_LEN];
+    uint8_t rep[SWX_PAIR_REPLY_LEN];
+    size_t n = 0;
+
+    CHECK(swx_session_create(&gate, SWX_ROLE_INVITER) == SWX_OK);
+    CHECK(swx_session_invite_seeded(gate, PAIR_SECRET, PAIR_SECRET_LEN,
+                                    GATE_SEED, inv, sizeof inv, &n) == SWX_OK);
+
+    /* 错误暗号:B 侧照常出回复码(两帧下限,裁决在 A 端),finish 拒绝 */
+    CHECK(swx_session_create(&client, SWX_ROLE_RESPONDER) == SWX_OK);
+    CHECK(swx_session_reply(client, (const uint8_t *) "猜错的暗号", 15,
+                            inv, n, rep, sizeof rep, &n) == SWX_OK);
+    CHECK(swx_session_finish(gate, rep, n) == SWX_E_CRYPTO);
+    swx_session_free(client);
+
+    /* 下一客户(正确暗号)在同一武装上直接成功——拒绝未消耗静态码 */
+    CHECK(swx_session_create(&client, SWX_ROLE_RESPONDER) == SWX_OK);
+    n = SWX_PAIR_MSG_LEN;    /* reply() 把 n 写成 64,这里要用邀请码长度 */
+    CHECK(swx_session_reply(client, PAIR_SECRET, PAIR_SECRET_LEN,
+                            inv, n, rep, sizeof rep, &n) == SWX_OK);
+    CHECK(swx_session_finish(gate, rep, n) == SWX_OK);
+    swx_session_free(client);
+    swx_session_free(gate);
+
+    /* 拿别的门的静态码来配:码不同 → confirm 必然不匹配 */
+    {
+        swx_session *other_gate = NULL;
+        uint8_t other_seed[SWX_GATE_SEED_LEN];
+        for (size_t i = 0; i < sizeof other_seed; i++) {
+            other_seed[i] = (uint8_t) (0x5b ^ i);
+        }
+        CHECK(swx_session_create(&other_gate, SWX_ROLE_INVITER) == SWX_OK);
+        CHECK(swx_session_invite_seeded(other_gate, PAIR_SECRET,
+                                        PAIR_SECRET_LEN, other_seed,
+                                        inv_other, sizeof inv_other, &n)
+              == SWX_OK);
+        CHECK(memcmp(inv, inv_other, sizeof inv) != 0);
+        CHECK(swx_session_create(&client, SWX_ROLE_RESPONDER) == SWX_OK);
+        CHECK(swx_session_reply(client, PAIR_SECRET, PAIR_SECRET_LEN,
+                                inv_other, n, rep, sizeof rep, &n) == SWX_OK);
+        CHECK(swx_session_create(&gate, SWX_ROLE_INVITER) == SWX_OK);
+        CHECK(swx_session_invite_seeded(gate, PAIR_SECRET, PAIR_SECRET_LEN,
+                                        GATE_SEED, inv, sizeof inv, &n)
+              == SWX_OK);
+        CHECK(swx_session_finish(gate, rep, SWX_PAIR_REPLY_LEN) == SWX_E_CRYPTO);
+        swx_session_free(client);
+        swx_session_free(gate);
+        swx_session_free(other_gate);
+    }
+    return 0;
+}
+
 int main(void)
 {
     int r = 0;
     r |= test_pairing_sas();
     r |= test_pairing_wrong_secret();
+    r |= test_public_invite_deterministic();
+    r |= test_public_pair_independence();
+    r |= test_public_reject_and_rearm();
     r |= test_text_roundtrip();
     r |= test_text_multipiece();
     r |= test_replay_tamper();

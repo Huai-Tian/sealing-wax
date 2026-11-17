@@ -142,6 +142,22 @@ static const uint8_t FP[16] = {
 static const uint64_t COUNTER = 1;
 static const char *PT = "火漆 wire-spec vector";
 
+/* 公共会话 (public session / 静态邀请码): deterministic pairing seed —
+ * fixed constants, NOT a PRNG-log draw; the seeded invite consumes zero
+ * entropy by construction (self-checked below). Production seeds are 64B
+ * CSPRNG output captured once at gate creation (§6), never derived from
+ * the 暗号 (§8). */
+static const uint8_t GATE_SEED[64] = {
+    0x37, 0x0a, 0x5e, 0xc2, 0x91, 0x4d, 0xb8, 0x66,
+    0xf3, 0x1d, 0x7a, 0x09, 0xd4, 0x8b, 0x2c, 0x50,
+    0xe6, 0x19, 0xaf, 0x73, 0x02, 0x9c, 0x48, 0xbe,
+    0x65, 0xf1, 0x30, 0x8a, 0xd7, 0x4b, 0x2e, 0x96,
+    0x71, 0x0d, 0xca, 0x58, 0x23, 0xb9, 0x04, 0x6e,
+    0xe2, 0x97, 0x3a, 0x51, 0xc8, 0x06, 0x74, 0x1b,
+    0x9d, 0x42, 0xa5, 0x30, 0x86, 0xf9, 0x63, 0x2b,
+    0x14, 0xdc, 0x79, 0x05, 0xba, 0x38, 0x91, 0x60,
+};
+
 static int failures = 0;
 
 #define CHECK(cond) do {                                                     \
@@ -290,6 +306,12 @@ int main(void)
     size_t invite_len = 0, reply_len = 0, a2b_len = 0, b2a_len = 0, blen = 0;
     char sas[10], sas_a[10], sas_b[10];
     uint8_t msg_key_a2b[32], msg_key_b2a[32], aad[SWX_AAD_LEN];
+    /* 公共会话向量 (public gate vector) */
+    uint8_t gate_blob[60], gate_session_key[32];
+    uint8_t ginv[SWX_PAIR_MSG_LEN], ginv2[SWX_PAIR_MSG_LEN];
+    uint8_t grep[SWX_PAIR_REPLY_LEN];
+    size_t ginv_len = 0, grep_len = 0, gblen = 0;
+    char gsas[SWX_SAS_DIGITS + 1], gsas_b[SWX_SAS_DIGITS + 1];
 
     /* pin every random byte BEFORE the library draws any */
     randombytes_set_implementation(&swx_prng);
@@ -351,6 +373,45 @@ int main(void)
      * seeding), then each SPAKE2 share generation draws 64B (A, then B) */
     CHECK(prng_log_used == 16 + 64 + 64);
 
+    /* ---- 公共会话 (public session / 静态邀请码) ----
+     * Two independent armed sessions must reproduce a byte-identical
+     * static invite while the PRNG log stays FROZEN (the seeded path draws
+     * zero entropy); a client then pairs against the static code with an
+     * ordinary responder draw. */
+    {
+        swx_session *g1 = NULL, *g2 = NULL, *gc = NULL;
+        size_t frozen;
+
+        CHECK(swx_session_create(&g1, SWX_ROLE_INVITER) == SWX_OK);
+        CHECK(swx_session_invite_seeded(g1, PAIR_SECRET, PAIR_SECRET_LEN,
+                                        GATE_SEED, ginv, sizeof ginv,
+                                        &ginv_len) == SWX_OK);
+        frozen = prng_log_used;
+        CHECK(swx_session_create(&g2, SWX_ROLE_INVITER) == SWX_OK);
+        CHECK(swx_session_invite_seeded(g2, PAIR_SECRET, PAIR_SECRET_LEN,
+                                        GATE_SEED, ginv2, sizeof ginv2,
+                                        &ginv_len) == SWX_OK);
+        CHECK(memcmp(ginv, ginv2, sizeof ginv) == 0);   /* 静态码恒等复现 */
+        CHECK(prng_log_used == frozen);                 /* 零熵消耗 */
+        swx_session_free(g2);
+
+        CHECK(swx_session_create(&gc, SWX_ROLE_RESPONDER) == SWX_OK);
+        CHECK(swx_session_reply(gc, PAIR_SECRET, PAIR_SECRET_LEN,
+                                ginv, sizeof ginv,
+                                grep, sizeof grep, &grep_len) == SWX_OK);
+        CHECK(swx_session_finish(g1, grep, grep_len) == SWX_OK);
+        CHECK(swx_session_sas(g1, gsas) == SWX_OK);
+        CHECK(swx_session_sas(gc, gsas_b) == SWX_OK);
+        CHECK(strcmp(gsas, gsas_b) == 0);
+        CHECK(swx_session_export(g1, gate_blob, sizeof gate_blob,
+                                 &gblen) == SWX_OK);
+        CHECK(gblen == 60);
+        memcpy(gate_session_key, gate_blob + 12, 32);
+        swx_session_free(g1);
+        swx_session_free(gc);
+        CHECK(prng_log_used == frozen + 64);            /* 仅客户端抽 64B */
+    }
+
     swx_session_free(a);
     swx_session_free(b);
 
@@ -391,6 +452,13 @@ int main(void)
     print_hex("msg_key_hex", msg_key_b2a, 32); printf(",\n    ");
     print_hex("frame_hex", wire_b2a, b2a_len); printf(",\n    ");
     print_b64("frame_b64", wire_b2a, b2a_len); printf("\n  },\n  ");
+    printf("\"public_gate\": {\n    ");
+    printf("\"note\": \"seeded invite draws zero entropy (PRNG log frozen across both armed sessions); the client pairing consumes the third 64B draw\",\n    ");
+    print_hex("seed_hex", GATE_SEED, 64); printf(",\n    ");
+    print_b64("static_invite_b64", ginv, sizeof ginv); printf(",\n    ");
+    print_b64("client_reply_b64", grep, grep_len); printf(",\n    ");
+    printf("\"sas\": \"%s\",\n    ", gsas);
+    print_hex("session_key_hex", gate_session_key, 32); printf("\n  },\n  ");
     print_hex("state_blob_responder_hex", blob_responder, 60); printf(",\n  ");
     print_hex("state_blob_inviter_hex", blob_inviter, 60);
     printf("\n}\n");

@@ -31,6 +31,14 @@
     "frame_hex": "e61a900c89893bdcfa40c0518aba0c000102030405060708090a1faede099b00c57e68a64eeb319139bd5eae09661054a7664e8dffccb4a959f029726d9b416581ce909489d9dd8a6c9773f7c7b1e709f0b1269148f678ecf8",
     "frame_b64": "5hqQDImJO9z6QMBRiroMAAECAwQFBgcICQofrt4JmwDFfmimTusxkTm9Xq4JZhBUp2ZOjf/MtKlZ8ClybZtBZYHOkJSJ2d2KbJdz98ex5wnwsSaRSPZ47Pg="
   },
+  "public_gate": {
+    "note": "seeded invite draws zero entropy (PRNG log frozen across both armed sessions); the client pairing consumes the third 64B draw",
+    "seed_hex": "370a5ec2914db866f31d7a09d48b2c50e619af73029c48be65f1308ad74b2e96710dca5823b9046ee2973a51c806741b9d42a53086f9632b14dc7905ba389160",
+    "static_invite_b64": "4cqBH2hjq+5OMRwHXETm9sS4BlKdMId3o46WKUpSRq4=",
+    "client_reply_b64": "kL8c5nt/gTre2Rzrv0V2i/sEScdPXlDAYcLoAvtrLsUbZskNFx4MUKfjylzshvBv2ymrsO/wY6zxdWH//FD/iA==",
+    "sas": "436307925",
+    "session_key_hex": "0c3d77762b6abeef9d45982752701df6bbd10341689d4ec28fb2142b7b649a7d"
+  },
   "state_blob_responder_hex": "535758530102010003e80000c41bd4da9ed935a9cbe43139c9ffd0937a1621eb49cddc2a429299503a9735dab65ff6346ac931dbfe7a97f5998e26c2",
   "state_blob_inviter_hex": "535758530101010003e80000c41bd4da9ed935a9cbe43139c9ffd0937a1621eb49cddc2a429299503a9735dafb1e87687a02b9991cd47c289c2f5773"
 }

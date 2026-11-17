@@ -57,6 +57,23 @@ int swx_session_invite(swx_session *s,
                        const uint8_t *secret, size_t secret_len,
                        uint8_t *out, size_t out_cap, size_t *out_len);
 
+/* 公共会话 (public session): inviter-side invite whose pairing scalar
+ * derives deterministically from seed — the same (seed, 暗号) reproduces a
+ * byte-identical 32B share on every call (静态邀请码: publish once, pair
+ * with every client who knows the 暗号). seed is 64B CSPRNG output captured
+ * once when the gate object is created (persisted by the platform layer,
+ * §6) and MUST NOT be derived from the 暗号 (§8: 暗号-derived scalar would
+ * turn leakage into impersonation). Runs through the identical upstream
+ * pipeline as CSPRNG draws (spake2 integration change #5); per-client keys
+ * stay independent because the client side still draws a fresh ephemeral.
+ * NEW + inviter state only, one call per session (re-arm = create a fresh
+ * seeded session). */
+#define SWX_GATE_SEED_LEN 64
+int swx_session_invite_seeded(swx_session *s,
+                              const uint8_t *secret, size_t secret_len,
+                              const uint8_t seed[SWX_GATE_SEED_LEN],
+                              uint8_t *out, size_t out_cap, size_t *out_len);
+
 /* Responder side: consumes the 32B invite share, derives the session and
  * emits the 64B reply share (32B SPAKE2 share || 32B HKDF confirm).
  * Pairing material is wiped and freed here; the session is ESTABLISHED

@@ -45,6 +45,23 @@ All listed here; protocol math untouched (host tests pin behaviour, and
    30-line shim (`sha512.h`/`sha512.c`) backing the same 3-call interface
    with libsodium's `crypto_hash_sha512`. The whole vendored set is now
    permissively licensed and links against the already-vendored libsodium.
+5. **`SPAKE2_generate_msg_seeded` added** (spake2.c/h, 2026-11 公共会话):
+   the original generate gained a static internal form whose private-scalar
+   CSPRNG draw is replaced by a caller-supplied 64B seed, routed through the
+   identical `sc_reduce` + cofactor pipeline — a seeded run is byte-equivalent
+   to a CSPRNG run that happened to draw the seed, so the same (seed, 暗号)
+   always reproduces the same 32B share (静态邀请码). No upstream math,
+   signature or state machine changes; the public wrapper keeps its original
+   CSPRNG behaviour. Pinned by `test_spake2.c` (determinism, cross-seed
+   divergence, standard-responder interop) and by the `public_gate` section
+   of `docs/vectors.json` (which also self-checks that the seeded path draws
+   ZERO entropy). Caller discipline: the seed is 64B CSPRNG output captured
+   once at gate creation, NEVER derived from the 暗号 (§8: a 暗号-derived
+   scalar would turn leakage into impersonation). The upstream security
+   proof requires the scalar to be uniform and secret — never fresh — so
+   a persisted scalar preserves every SPAKE2 assumption (offline guessing
+   stays infeasible; per-client keys stay independent because the client
+   side still draws a fresh ephemeral).
 
 ## Security notes (honest boundaries)
 

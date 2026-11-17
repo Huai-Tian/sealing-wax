@@ -62,6 +62,19 @@ extern int SPAKE2_generate_msg(struct spake2_ctx_st *ctx,
 				    uint8_t *out, size_t *out_len, size_t max_out_len,
                     const uint8_t *password, size_t password_len);
 
+/* 火漆 integration change #5 (公共会话/静态邀请码): deterministic variant
+ * of SPAKE2_generate_msg — |seed| (64B) replaces the private-scalar CSPRNG
+ * draw and runs through the identical upstream pipeline, so the same
+ * (seed, password) always reproduces a byte-identical share. Callers MUST
+ * supply CSPRNG output captured once at gate creation and MUST NOT derive
+ * the seed from the password (that would turn 暗号 leakage into full
+ * impersonation). The upstream security proof needs the scalar uniform and
+ * secret, never fresh — seeded draws preserve both. */
+extern int SPAKE2_generate_msg_seeded(struct spake2_ctx_st *ctx,
+					    uint8_t *out, size_t *out_len, size_t max_out_len,
+                    const uint8_t *password, size_t password_len,
+                    const uint8_t seed[64]);
+
 extern int SPAKE2_process_msg(struct spake2_ctx_st *ctx,
 				    uint8_t *out_key, size_t *out_key_len,
                     size_t max_out_key_len, const uint8_t *their_msg,
