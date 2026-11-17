@@ -84,6 +84,7 @@
     <!-- chat: file channel -->
     <string name="busy_encrypting">Encrypting file…</string>
     <string name="share_chooser">Share the sealed file to IM</string>
+    <string name="file_bubble">[File] %1$s (%2$s)</string>
     <string name="busy_decrypting">Decrypting…</string>
     <string name="decrypted_exported">Decrypted and exported</string>
     <string name="busy_reading_name">Reading file name…</string>

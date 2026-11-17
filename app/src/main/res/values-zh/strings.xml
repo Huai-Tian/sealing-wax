@@ -82,6 +82,7 @@
     <!-- chat: file channel -->
     <string name="busy_encrypting">正在加密文件…</string>
     <string name="share_chooser">分享密文文件到 IM</string>
+    <string name="file_bubble">[文件] %1$s (%2$s)</string>
     <string name="busy_decrypting">正在解密…</string>
     <string name="decrypted_exported">已解密导出</string>
     <string name="busy_reading_name">正在读取文件名…</string>

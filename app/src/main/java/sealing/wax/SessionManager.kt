@@ -29,12 +29,15 @@ import java.security.SecureRandom
 import java.util.UUID
 import org.json.JSONObject
 
-/** One decrypted view item (memory only). */
+/** One decrypted view item (memory only). [fileHash] non-null = a file
+ *  entry rendered from the ledger (§7): not a ciphertext message, never
+ *  persisted into history — saveLiveAs routes it through the ledger. */
 data class UiMessage(
     val dir: Int,
     val text: String,
     val ts: Long,
     val pieces: List<String>,
+    val fileHash: ByteArray? = null,
 )
 
 sealed interface OpenResult {
@@ -46,8 +49,6 @@ sealed interface OpenResult {
 }
 
 data class FileMeta(val name: String, val size: Long)
-
-data class SwxDecryption(val meta: FileMeta, val bytesWritten: Long)
 
 /**
  * Runtime hub: one live conversation (saved or unsaved), the pairing state
@@ -91,6 +92,11 @@ object SessionManager {
 
     /** In-memory transcript of the live conversation (both directions). */
     val messages = androidx.compose.runtime.mutableStateListOf<UiMessage>()
+
+    /** Ledger of an unsaved conversation (memory only, dies with the chat;
+     *  §3-safe). Migrated into the envelope's ledger by saveLiveAs, so file
+     *  history survives the save decision and drives re-import dedup. */
+    private val liveLedger = mutableListOf<LedgerEntry>()
 
     /** True between createSession and SAS confirmation. */
     var pairing: Boolean = false
@@ -196,9 +202,12 @@ object SessionManager {
         Persistence.writeCounters(context, id, c[0] + PREPAY, c[1])
         prepaidEnd = c[0] + PREPAY
         messages.clear()
-        s.history.forEach { e ->
-            decryptHistoryEntry(e)?.let { messages.add(it) }
-        }
+        /* merged transcript: decrypted text history + file entries rendered
+         * from the ledger (§7), chronological; stable sort keeps the stored
+         * order for equal timestamps */
+        (s.history.mapNotNull { decryptHistoryEntry(it) } + s.ledger.map { fileUi(it) })
+            .sortedBy { it.ts }
+            .forEach { messages.add(it) }
         resetHistoryScratch()    /* scratch pair only lives for the entry decrypt */
     }
 
@@ -258,8 +267,13 @@ object SessionManager {
             stateBlob = blob,
         )
         messages.forEach { m ->
-            s.history.add(HistoryEntry(m.dir, m.ts, ByteArray(16), m.pieces))
+            /* file entries ride in the ledger, not in the ciphertext history */
+            if (m.fileHash == null) {
+                s.history.add(HistoryEntry(m.dir, m.ts, ByteArray(16), m.pieces))
+            }
         }
+        s.ledger.addAll(liveLedger)
+        liveLedger.clear()
         Persistence.saveSession(context, s)
         /* 落盘预支号段而非当前值(对齐 openSaved 语义,第九批):中途保存
          * 后会话继续,若只写 c[0],首条消息的 counter 消耗与 ensurePrepaid
@@ -285,6 +299,7 @@ object SessionManager {
         sas = null
         pendingPieces.clear()
         messages.clear()
+        liveLedger.clear()
     }
 
     /* ---- padding (per-session, sender side only; §4) ---- */
@@ -403,6 +418,43 @@ object SessionManager {
 
     /* ---- file channel (§7) ---- */
 
+    /** Ledger sink for the live conversation: the envelope's ledger for a
+     *  saved session (marks the envelope dirty), the in-memory ledger for
+     *  an unsaved one (dies with the chat, §3-safe). */
+    private fun recordLedger(entry: LedgerEntry) {
+        val s = saved
+        if (s != null) {
+            s.ledger.add(entry)
+            s.lastUsedMs = entry.ts
+            dirty = true
+        } else {
+            liveLedger.add(entry)
+        }
+    }
+
+    /** True when this exact .swx byte stream was already received (either
+     *  ledger) — a re-import then decrypts and exports again but adds no
+     *  second history entry. */
+    private fun fileSeen(hash: ByteArray): Boolean =
+        (saved?.ledger ?: liveLedger).any { e ->
+            e.dir == DIR_RECEIVED && e.hash.contentEquals(hash)
+        }
+
+    /** "[文件] name (size)" bubble for a ledger entry (§7; 收发对称,
+     *  双语铁律走资源)。 */
+    fun fileUi(e: LedgerEntry): UiMessage = UiMessage(
+        e.dir, str(R.string.file_bubble, e.name, formatSize(e.size)),
+        e.ts, emptyList(), e.hash,
+    )
+
+    /** Human-readable byte size for the file bubble. */
+    private fun formatSize(n: Long): String = when {
+        n < 1024 -> "$n B"
+        n < 1024L * 1024 -> String.format(java.util.Locale.ROOT, "%.1f KB", n / 1024.0)
+        n < 1024L * 1024 * 1024 -> String.format(java.util.Locale.ROOT, "%.1f MB", n / 1048576.0)
+        else -> String.format(java.util.Locale.ROOT, "%.1f GB", n / 1073741824.0)
+    }
+
     /** Staging dir for .swx shares; cleared on app start. */
     fun shareDir(context: Context = ctx()): File =
         File(context.cacheDir, "share").apply { mkdirs() }
@@ -456,13 +508,9 @@ object SessionManager {
         WaxNative.hashFree(hh)
         val fp = WaxNative.lastFp(handle)
         val counter = WaxNative.lastFrame(handle)[0]
-        val ts = System.currentTimeMillis()
-        val entry = LedgerEntry(meta.name, hash, fp, meta.size, DIR_SENT, counter, ts)
-        saved?.let {
-            it.ledger.add(entry)
-            it.lastUsedMs = ts
-            dirty = true
-        }
+        val entry = LedgerEntry(meta.name, hash, fp, meta.size, DIR_SENT, counter,
+                                System.currentTimeMillis())
+        recordLedger(entry)
         ensurePrepaid()
         return entry
     }
@@ -521,14 +569,16 @@ object SessionManager {
      * .swx any number of times succeeds (the old live-handle path replayed
      * consumed counters and failed with SWX_E_REPLAY). The ledger entry is
      * deduped by hash — re-exports of the same byte stream are not new
-     * events. Plaintext exists only in the stream.
+     * events. Returns the "[文件] name (size)" bubble on first import,
+     * null on a re-import (history already has it). Plaintext exists only
+     * in the stream.
      */
     fun decryptSwx(
         input: InputStream,
         out: OutputStream,
         hash: ByteArray,
         onProgress: (Long) -> Unit = {},
-    ): SwxDecryption {
+    ): UiMessage? {
         require(handle != 0L) { "没有活跃会话" }
         val blob = WaxNative.exportState(handle)
         val scratch = WaxNative.importState(blob, 1, 0)
@@ -588,16 +638,11 @@ object SessionManager {
         val m = meta ?: error("SWX_E_EMPTY")
         require(expectedIdx == total) { "SWX_E_TRUNCATED" }
         require(remaining == 0L) { "SWX_E_TRUNCATED" }
-        saved?.let {
-            if (it.ledger.none { e -> e.dir == DIR_RECEIVED && e.hash.contentEquals(hash) }) {
-                it.ledger.add(
-                    LedgerEntry(m.name, hash, fp, m.size, DIR_RECEIVED, counter, System.currentTimeMillis())
-                )
-            }
-            it.lastUsedMs = System.currentTimeMillis()
-            dirty = true
-        }
-        return SwxDecryption(m, written)
+        if (fileSeen(hash)) return null    /* re-import: export again, no new entry */
+        val entry = LedgerEntry(m.name, hash, fp, m.size, DIR_RECEIVED, counter,
+                                System.currentTimeMillis())
+        recordLedger(entry)
+        return fileUi(entry)
     }
 
     /* ---- helpers ---- */

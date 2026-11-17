@@ -184,13 +184,16 @@ fun ChatScreen(
                 }
                 require(size >= 0) { "SWX_E_META" }
                 val outFile = File(SessionManager.shareDir(context), "$name.swx")
-                withContext(Dispatchers.IO) {
+                val sentEntry = withContext(Dispatchers.IO) {
                     resolver.openInputStream(uri)!!.use { i ->
                         outFile.outputStream().use { o ->
                             SessionManager.sealFile(i, FileMeta(name, size), o)
                         }
                     }
                 }
+                /* [文件] 气泡(§7,收发对称):封缄完成即记录——一个 .swx 一条,
+                 * 与内部分帧数无关;分享被取消也保留(counter 已消耗,如实) */
+                SessionManager.messages.add(SessionManager.fileUi(sentEntry))
                 busy = null
                 val shareUri = FileProvider.getUriForFile(
                     context, "${context.packageName}.fileprovider", outFile,
@@ -225,13 +228,15 @@ fun ChatScreen(
         if (uri != null && src != null && hash != null) scope.launch {
             try {
                 busy = context.getString(R.string.busy_decrypting)
-                withContext(Dispatchers.IO) {
+                val bubble = withContext(Dispatchers.IO) {
                     context.contentResolver.openInputStream(src)!!.use { i ->
                         context.contentResolver.openOutputStream(uri)!!.use { o ->
                             SessionManager.decryptSwx(i, o, hash)
                         }
                     }
                 }
+                /* 重复解密(重导入)不产生新历史:hash 去重在账本层裁决 */
+                bubble?.let { SessionManager.messages.add(it) }
                 pendingSwx = null
                 swxHash = null
                 busy = null
