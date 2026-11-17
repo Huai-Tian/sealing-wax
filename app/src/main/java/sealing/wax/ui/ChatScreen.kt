@@ -503,18 +503,41 @@ fun ChatScreen(
                             Button(
                                 onClick = {
                                     val pieces = SessionManager.sealText(input)
-                                    clipboard.setText(AnnotatedString(pieces.joinToString("\n")))
+                                    if (pieces.size == 1) {
+                                        clipboard.setText(AnnotatedString(pieces[0]))
+                                        Toast.makeText(
+                                            context,
+                                            context.getString(R.string.sealed_toast_one),
+                                            Toast.LENGTH_SHORT,
+                                        ).show()
+                                    } else {
+                                        /* 逐片入剪贴板(所有者指示,2026-11,全面替换
+                                         * 一次全复制——正常分片与混淆分片统一):
+                                         * 先复制定位标记,再逐片写入——剪贴板历史
+                                         * 依次积累,聊天软件里从剪贴板历史逐条粘贴
+                                         * 发送(每片 ≤4000 字符,落在 IM 单条限制内,
+                                         * 根治超长消息被截断)。标记仅供发送者在
+                                         * 剪贴板历史中定位分片起点,属本地内容;
+                                         * 片间 100ms 间隔稳住剪贴板监听时序 */
+                                        scope.launch {
+                                            clipboard.setText(
+                                                AnnotatedString(
+                                                    context.getString(R.string.file_pieces_marker),
+                                                ),
+                                            )
+                                            pieces.forEach { p ->
+                                                delay(100)
+                                                clipboard.setText(AnnotatedString(p))
+                                            }
+                                        }
+                                        Toast.makeText(
+                                            context,
+                                            context.getString(R.string.sealed_toast_many, pieces.size),
+                                            Toast.LENGTH_LONG,
+                                        ).show()
+                                    }
                                     input = ""
                                     panelOpen = false
-                                    Toast.makeText(
-                                        context,
-                                        if (pieces.size == 1) {
-                                            context.getString(R.string.sealed_toast_one)
-                                        } else {
-                                            context.getString(R.string.sealed_toast_many, pieces.size)
-                                        },
-                                        Toast.LENGTH_SHORT,
-                                    ).show()
                                 },
                                 modifier = Modifier.weight(0.2f),
                                 contentPadding = PaddingValues(0.dp),

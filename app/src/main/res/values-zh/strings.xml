@@ -76,7 +76,8 @@
     <string name="seal_cd">加密并复制</string>
     <string name="sealed_toast_one">已加密并复制</string>
     <string name="input_limit_toast">已达输入上限 %1$d 字</string>
-    <string name="sealed_toast_many">已加密 %1$d 片并全部复制,一次粘贴即可</string>
+    <string name="file_pieces_marker">----密文分片----</string>
+    <string name="sealed_toast_many">已加密 %1$d 片并逐片复制,请在聊天软件的剪贴板历史中按顺序逐条发送</string>
     <string name="tile_send">发文件</string>
     <string name="tile_receive">收文件</string>
 

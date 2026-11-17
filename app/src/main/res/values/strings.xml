@@ -78,7 +78,8 @@
     <string name="seal_cd">Encrypt and copy</string>
     <string name="sealed_toast_one">Encrypted and copied</string>
     <string name="input_limit_toast">Input limit of %1$d characters reached</string>
-    <string name="sealed_toast_many">Encrypted into %1$d pieces, all copied — one paste is enough</string>
+    <string name="file_pieces_marker">----ciphertext pieces----</string>
+    <string name="sealed_toast_many">Encrypted into %1$d pieces, copied one by one — send them in order from your chat app\'s clipboard history</string>
     <string name="tile_send">Send file</string>
     <string name="tile_receive">Receive file</string>
 
