@@ -50,6 +50,19 @@
     <string name="pair_enter_chat">They\'ve verified it — enter the chat</string>
     <string name="clear_field_cd">Clear input</string>
 
+    <!-- public session (公共会话/静态邀请码, §5): one entry, subset of
+         New session; the static code pairs with every client who knows
+         the passphrase -->
+    <string name="pair_step1_public">Step 1: think of a passphrase</string>
+    <string name="public_switch">Public session</string>
+    <string name="public_name_label">Name</string>
+    <string name="public_create_btn">Create public session</string>
+    <string name="public_static_code">Static invite code</string>
+    <string name="public_paste_reply">Paste the client\'s reply code</string>
+    <string name="public_reply_crypto">Passphrase mismatch</string>
+    <string name="public_delete_title">Delete public session</string>
+    <string name="public_delete_text">New clients can no longer pair; established sessions are unaffected; the static invite code in your bio dies permanently — remove it yourself.</string>
+
     <!-- chat: shell -->
     <string name="chat_default_title">Session</string>
     <string name="unnamed_session">Unnamed session</string>

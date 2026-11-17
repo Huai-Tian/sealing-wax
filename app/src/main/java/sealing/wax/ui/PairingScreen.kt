@@ -15,6 +15,7 @@ import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -33,6 +34,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -61,6 +63,7 @@ import sealing.wax.SessionManager
 fun NewSessionScreen(
     onBack: () -> Unit,
     onPaired: () -> Unit,
+    onPublicCreated: () -> Unit,
 ) {
     val clipboard = LocalClipboardManager.current
     val context = LocalContext.current
@@ -68,6 +71,10 @@ fun NewSessionScreen(
     var invite by remember { mutableStateOf<String?>(null) }
     var reply by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
+    /* 公共会话(§5,所有者定稿):同一入口的子集模式——开关只改变
+     * 第一步的形态与按钮去向;普通配对流程一字不动 */
+    var publicMode by remember { mutableStateOf(false) }
+    var name by remember { mutableStateOf("") }
 
     Scaffold(
         topBar = {
@@ -98,10 +105,24 @@ fun NewSessionScreen(
         ) {
             if (invite == null) {
                 Text(
-                    stringResource(R.string.pair_step1),
+                    /* 公共态下行头换词(所有者定稿):没有"对方",只有门禁暗号 */
+                    stringResource(
+                        if (publicMode) R.string.pair_step1_public
+                        else R.string.pair_step1,
+                    ),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                 )
+                if (publicMode) {
+                    OutlinedTextField(
+                        value = name,
+                        onValueChange = { name = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text(stringResource(R.string.public_name_label)) },
+                        singleLine = true,
+                        trailingIcon = { ClearFieldIcon(name) { name = "" } },
+                    )
+                }
                 OutlinedTextField(
                     value = secret,
                     onValueChange = { secret = it },
@@ -111,20 +132,53 @@ fun NewSessionScreen(
                     singleLine = true,
                     trailingIcon = { ClearFieldIcon(secret) { secret = "" } },
                 )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        stringResource(R.string.public_switch),
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Switch(checked = publicMode, onCheckedChange = { publicMode = it })
+                }
                 Button(
                     onClick = {
-                        try {
-                            invite = SessionManager.startInvite(secret.toByteArray(Charsets.UTF_8))
-                        } catch (e: IllegalStateException) {
-                            Log.w("SealingWax", "startInvite failed", e)
-                            error = SessionManager.stableError(
-                                context.getString(R.string.pair_invite_gen_fail), e,
-                            )
+                        if (publicMode) {
+                            /* 创建即显式保存(§6);回首页见置顶卡(所有者定稿) */
+                            try {
+                                SessionManager.createPublicSession(
+                                    name, secret.toByteArray(Charsets.UTF_8),
+                                )
+                                onPublicCreated()
+                            } catch (e: Exception) {
+                                Log.w("SealingWax", "createPublicSession failed", e)
+                                error = SessionManager.stableError(
+                                    context.getString(R.string.pair_fail_new), e,
+                                )
+                            }
+                        } else {
+                            try {
+                                invite = SessionManager.startInvite(secret.toByteArray(Charsets.UTF_8))
+                            } catch (e: IllegalStateException) {
+                                Log.w("SealingWax", "startInvite failed", e)
+                                error = SessionManager.stableError(
+                                    context.getString(R.string.pair_invite_gen_fail), e,
+                                )
+                            }
                         }
                     },
                     enabled = secret.isNotBlank(),
                     modifier = Modifier.fillMaxWidth(),
-                ) { Text(stringResource(R.string.pair_invite_btn)) }
+                ) {
+                    Text(
+                        stringResource(
+                            if (publicMode) R.string.public_create_btn
+                            else R.string.pair_invite_btn,
+                        ),
+                    )
+                }
             } else {
                 Text(
                     stringResource(R.string.pair_step2),

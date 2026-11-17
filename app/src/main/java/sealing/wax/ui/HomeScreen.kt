@@ -30,9 +30,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Key
-import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -59,6 +59,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import sealing.wax.R
+import sealing.wax.store.PublicSession
 import sealing.wax.store.SavedSession
 import java.text.DateFormat
 import java.util.Date
@@ -68,7 +69,10 @@ import java.util.Date
  *  (真机反馈 2026-11:静默空表曾把加载失败当成了空数据)。 */
 sealed interface SessionListState {
     data object Loading : SessionListState
-    data class Ready(val sessions: List<SavedSession>) : SessionListState
+    data class Ready(
+        val sessions: List<SavedSession>,
+        val publics: List<PublicSession>,
+    ) : SessionListState
     data object Failed : SessionListState
 }
 
@@ -83,12 +87,16 @@ fun HomeScreen(
     onOpenSession: (String) -> Unit,
     onRenameSession: (SavedSession, String) -> Unit,
     onDeleteSession: (SavedSession) -> Unit,
+    onOpenPublic: (PublicSession) -> Unit,
+    onRenamePublic: (PublicSession, String) -> Unit,
+    onDeletePublic: (PublicSession) -> Unit,
     onOpenSource: () -> Unit,
 ) {
     val context = LocalContext.current
     var fabExpanded by remember { mutableStateOf(false) }
-    var renameTarget by remember { mutableStateOf<SavedSession?>(null) }
-    var deleteTarget by remember { mutableStateOf<SavedSession?>(null) }
+    /* 两种卡片(普通会话/公共会话)共用改名与删除弹窗,目标按类型分发 */
+    var renameTarget by remember { mutableStateOf<Any?>(null) }
+    var deleteTarget by remember { mutableStateOf<Any?>(null) }
     var aboutOpen by remember { mutableStateOf(false) }
 
     Scaffold(
@@ -192,7 +200,8 @@ fun HomeScreen(
 
                         is SessionListState.Ready -> {
                             val sessions = state.sessions
-                            if (sessions.isEmpty()) {
+                            val publics = state.publics
+                            if (sessions.isEmpty() && publics.isEmpty()) {
                                 /* 空态:原"已保存的会话"块的小字,移至居中(§9) */
                                 Text(
                                     stringResource(R.string.home_empty),
@@ -209,6 +218,47 @@ fun HomeScreen(
                                     contentPadding = androidx.compose.foundation.layout.PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
                                     verticalArrangement = Arrangement.spacedBy(12.dp),
                                 ) {
+                                    /* 公共会话置顶(所有者定稿):位置即身份,
+                                     * 图标只当视觉节拍器——公共=书签,私聊=钥匙 */
+                                    items(publics, key = { "p" + it.id }) { p ->
+                                        Card(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .combinedClickable(
+                                                    onClick = { onOpenPublic(p) },
+                                                    onLongClick = { renameTarget = p },
+                                                ),
+                                            colors = CardDefaults.cardColors(
+                                                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                            ),
+                                        ) {
+                                            Row(
+                                                Modifier.padding(16.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.Bookmark,
+                                                    contentDescription = null,
+                                                    tint = MaterialTheme.colorScheme.primary,
+                                                )
+                                                Spacer(Modifier.width(12.dp))
+                                                Column(Modifier.weight(1f)) {
+                                                    Text(p.name, style = MaterialTheme.typography.titleMedium)
+                                                    Text(
+                                                        stringResource(
+                                                            R.string.home_last_used,
+                                                            DateFormat.getDateTimeInstance().format(Date(p.lastUsedMs)),
+                                                        ),
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    )
+                                                }
+                                                IconButton(onClick = { deleteTarget = p }) {
+                                                    Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.common_delete))
+                                                }
+                                            }
+                                        }
+                                    }
                                     items(sessions, key = { it.id }) { s ->
                                         Card(
                                             modifier = Modifier
@@ -226,7 +276,7 @@ fun HomeScreen(
                                                 verticalAlignment = Alignment.CenterVertically,
                                             ) {
                                                 Icon(
-                                                    Icons.Default.Lock,
+                                                    Icons.Default.Key,
                                                     contentDescription = null,
                                                     tint = MaterialTheme.colorScheme.primary,
                                                 )
@@ -270,22 +320,53 @@ fun HomeScreen(
         }
     }
 
-    renameTarget?.let { s ->
+    renameTarget?.let { t ->
+        val initial = when (t) {
+            is SavedSession -> t.name
+            is PublicSession -> t.name
+            else -> ""
+        }
         RenameSessionDialog(
-            initialName = s.name,
+            initialName = initial,
             onDismiss = { renameTarget = null },
-            onConfirm = { onRenameSession(s, it) },
+            onConfirm = { name ->
+                when (t) {
+                    is SavedSession -> onRenameSession(t, name)
+                    is PublicSession -> onRenamePublic(t, name)
+                }
+                renameTarget = null
+            },
         )
     }
 
-    deleteTarget?.let { s ->
+    deleteTarget?.let { t ->
+        /* 删除语义随种类不同:普通会话=房塌(旧密文永远解不开);
+         * 公共会话=门拆(已建会话不受影响,简介旧码永久失效) */
+        val isPublic = t is PublicSession
         AlertDialog(
             onDismissRequest = { deleteTarget = null },
-            title = { Text(stringResource(R.string.home_delete_title)) },
-            text = { Text(stringResource(R.string.home_delete_text)) },
+            title = {
+                Text(
+                    stringResource(
+                        if (isPublic) R.string.public_delete_title
+                        else R.string.home_delete_title,
+                    ),
+                )
+            },
+            text = {
+                Text(
+                    stringResource(
+                        if (isPublic) R.string.public_delete_text
+                        else R.string.home_delete_text,
+                    ),
+                )
+            },
             confirmButton = {
                 TextButton(onClick = {
-                    onDeleteSession(s)
+                    when (t) {
+                        is SavedSession -> onDeleteSession(t)
+                        is PublicSession -> onDeletePublic(t)
+                    }
                     deleteTarget = null
                     Toast.makeText(
                         context, context.getString(R.string.home_deleted_toast), Toast.LENGTH_SHORT,

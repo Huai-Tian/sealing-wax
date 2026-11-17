@@ -47,6 +47,7 @@ import sealing.wax.ui.HomeScreen
 import sealing.wax.ui.JoinSessionScreen
 import sealing.wax.ui.NewSessionScreen
 import sealing.wax.ui.OpenSourceScreen
+import sealing.wax.ui.PublicSessionScreen
 import sealing.wax.ui.SessionListState
 import sealing.wax.ui.theme.SealingWaxTheme
 
@@ -57,6 +58,8 @@ private sealed interface Dest {
     data object JoinSession : Dest
     data object Chat : Dest
     data object OpenSource : Dest
+    /* 公共会话运营屏(§5):打开即武装,返回即焚毁 */
+    data class Public(val id: String, val name: String) : Dest
 }
 
 class MainActivity : ComponentActivity() {
@@ -123,20 +126,22 @@ private fun App() {
         scope.launch {
             listState = SessionListState.Loading
             var list = withContext(Dispatchers.IO) { Persistence.listSessions(context) }
-            var failed = list.isEmpty() &&
+            var publics = withContext(Dispatchers.IO) { Persistence.listPublicSessions(context) }
+            var failed = list.isEmpty() && publics.isEmpty() &&
                     withContext(Dispatchers.IO) { Persistence.sessionDirCount(context) } > 0
             var attempt = 0
             while (failed && attempt < 3) {
                 attempt++
                 delay(300L * attempt)    /* 300 / 600 / 900ms,加载动画之下 */
                 list = withContext(Dispatchers.IO) { Persistence.listSessions(context) }
-                failed = list.isEmpty() &&
+                publics = withContext(Dispatchers.IO) { Persistence.listPublicSessions(context) }
+                failed = list.isEmpty() && publics.isEmpty() &&
                         withContext(Dispatchers.IO) {
                             Persistence.sessionDirCount(context)
                         } > 0
             }
             listState = if (failed) SessionListState.Failed
-                       else SessionListState.Ready(list)
+                       else SessionListState.Ready(list, publics)
         }
     }
 
@@ -212,6 +217,29 @@ private fun App() {
                         reload()
                     }
                 },
+                onOpenPublic = { p ->
+                    dest = Dest.Public(p.id, p.name)
+                },
+                onRenamePublic = { p, name ->
+                    scope.launch {
+                        withContext(Dispatchers.IO) {
+                            val loaded = Persistence.readPublicSession(context, p.id)
+                            if (loaded != null) {
+                                loaded.name = name
+                                Persistence.savePublicSession(context, loaded)
+                            }
+                        }
+                        reload()
+                    }
+                },
+                onDeletePublic = { p ->
+                    scope.launch {
+                        withContext(Dispatchers.IO) {
+                            Persistence.deleteSession(context, p.id)
+                        }
+                        reload()
+                    }
+                },
                 onOpenSource = { dest = Dest.OpenSource },
             )
         }
@@ -236,6 +264,9 @@ private fun App() {
                     chatSaved = false
                     dest = Dest.Chat
                 },
+                /* 公共会话创建即显式保存(§6):回首页见置顶卡,复制静态码
+                 *  进简介(所有者定稿流程) */
+                onPublicCreated = { goHome() },
             )
         }
 
@@ -247,6 +278,33 @@ private fun App() {
             JoinSessionScreen(
                 onBack = { goHome() },
                 onJoined = {
+                    SessionManager.beginConversation()
+                    chatTitle = context.getString(R.string.unnamed_session)
+                    chatSaved = false
+                    dest = Dest.Chat
+                },
+            )
+        }
+
+        is Dest.Public -> {
+            /* 委托属性不可 smart-cast(remember var),分支内显式取局部 */
+            val pub = dest as Dest.Public
+            /* 返回 = 焚毁武装(§5):ctx 即焚,对象长存,下次打开再武装。
+             * 系统返回与顶栏箭头同语义 */
+            BackHandler {
+                SessionManager.abortPairing()
+                goHome()
+            }
+            PublicSessionScreen(
+                id = pub.id,
+                name = pub.name,
+                onBack = {
+                    SessionManager.abortPairing()
+                    goHome()
+                },
+                /* 粘贴即配对成功:armed ctx 毕业为普通客户会话,直接进对话
+                 * (SAS 顶栏常驻;退出保存命名走全体会话共同法律) */
+                onClientPaired = {
                     SessionManager.beginConversation()
                     chatTitle = context.getString(R.string.unnamed_session)
                     chatSaved = false
