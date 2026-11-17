@@ -26,7 +26,7 @@ result and the password hash.
 | `spake2.h` | spake2-c | Apache-2.0 (Muntashir 2022) |
 | `ed25519.h` | spake2-c (BoringSSL curve25519 internals + SUPERCOP ref10 public domain + Fiat) | ISC / public domain |
 | `curve25519_32.h` | spake2-c (mit-plv/fiat-crypto) | MIT |
-| `sha512.h` / `sha512.c` | written for 火漆 | AGPL-3.0-or-later (this project) |
+| `sha512.h` / `sha512.c` | written for 火漆 | AGPL-3.0-only (this project) |
 
 ## 火漆 integration changes vs upstream spake2-c
 

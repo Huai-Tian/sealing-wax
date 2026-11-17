@@ -148,7 +148,7 @@
     <string name="oss_c4">Jetpack Compose + Material 3</string>
     <string name="oss_c5">Tink(信封加密)</string>
     <string name="oss_c6">ZXing core(二维码)</string>
-    <string name="oss_lic_agpl">AGPL-3.0-or-later</string>
+    <string name="oss_lic_agpl">AGPL-3.0-only(无商业例外)</string>
     <string name="oss_lic_isc">ISC</string>
     <string name="oss_lic_spake2">ISC / Apache-2.0 / MIT / 公共领域(按文件)</string>
     <string name="oss_lic_apache">Apache-2.0</string>

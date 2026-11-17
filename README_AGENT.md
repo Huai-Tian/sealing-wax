@@ -9,7 +9,7 @@
 ```yaml
 project: sealing-wax
 display_name: "火漆 · Sealing Wax"
-license: AGPL-3.0-or-later
+license: AGPL-3.0-only
 spec_version: 2.0-draft
 one_line: "跑在任意 IM 之上的端到端加密会话层:默认零状态,可选保存,加密跟随用户"
 declaration: ["端到端", "两端平等", "默认零状态"]   # 对外表述只用这三个可验证的词
@@ -484,6 +484,16 @@ trademark_note: "发布前做类别 9/42 商标检索;英文表述永远用'两�
 | 续聊/邀请 | (无此概念) | 纯钥匙直连;type 0x05 设计中途否决 |
 
 ### 2.0-draft 之后(实现期变更)
+
+- **2026-11 许可收紧为 AGPL-3.0-only**(所有者指示):去 or-later——全
+  源码 SPDX 头与许可公告改为"version 3 of the License only"(含
+  PublicSessionScreen 变体头与 spake2.c 集成注记);开放源代码页许可行
+  升格为「AGPL-3.0-only(无商业例外)」(oss_lic_agpl,双语同步,清单
+  形态不变);spake2/README 许可表同步。§0 license 字段更新。纯文书层,
+  协议/KPI 不受影响。同批交付:双语 README.md/README_ZH.md 面向用户
+  (是什么/怎么用/原理 + 非商业声明 + 免责声明,参照所有者其他项目
+  声明体系);.gitattributes 标记 vendored 密码库(libsodium/spake2)
+  为 linguist-vendored,修正 GitHub 语言统计
 
 - **2026-11 新建会话粘贴即配对**(所有者指示,运营打磨批2):第三步改
   自动裁决——与运营屏同款机制(150ms 防抖,长度即格式,裁决在 finish);

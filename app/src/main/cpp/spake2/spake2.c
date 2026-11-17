@@ -15,7 +15,7 @@
  * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* SPDX-License-Identifier: AGPL-3.0-or-later (integration notes only; the
+/* SPDX-License-Identifier: AGPL-3.0-only (integration notes only; the
  * code below is third-party, see spake2/README.md)
  *
  * 火漆 integration changes vs upstream MuntashirAkon/spake2-c (all listed in

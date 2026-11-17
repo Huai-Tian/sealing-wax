@@ -152,7 +152,7 @@
     <string name="oss_c4">Jetpack Compose + Material 3</string>
     <string name="oss_c5">Tink (envelope encryption)</string>
     <string name="oss_c6">ZXing core (QR codes)</string>
-    <string name="oss_lic_agpl">AGPL-3.0-or-later</string>
+    <string name="oss_lic_agpl">AGPL-3.0-only (no commercial exceptions)</string>
     <string name="oss_lic_isc">ISC</string>
     <string name="oss_lic_spake2">ISC / Apache-2.0 / MIT / public domain (per file)</string>
     <string name="oss_lic_apache">Apache-2.0</string>
