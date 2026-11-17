@@ -73,10 +73,10 @@
     <string name="padding_off">Off</string>
 
     <!-- chat: input bar -->
-    <string name="input_label">Plaintext, or paste IM ciphertext</string>
+    <string name="input_label">Plaintext, or paste ciphertext from chat app</string>
     <string name="plus_cd">Send file and more</string>
     <string name="seal_cd">Encrypt and copy</string>
-    <string name="sealed_toast_one">Encrypted and copied — paste it in your IM</string>
+    <string name="sealed_toast_one">Encrypted and copied — paste it in your chat app</string>
     <string name="sealed_toast_many">Encrypted into %1$d pieces, all copied — one paste is enough</string>
     <string name="tile_send">Send file</string>
     <string name="tile_receive">Receive file</string>
