@@ -94,6 +94,7 @@ data class SavedSession(
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("v", 1)
+        put("kind", "chat")
         put("name", name)
         put("role", role)
         put("sas", sas)
@@ -129,3 +130,44 @@ data class SavedSession(
 
 internal fun b64(b: ByteArray): String = Base64.getEncoder().encodeToString(b)
 internal fun unb64(s: String): ByteArray = Base64.getDecoder().decode(s)
+
+/** 公共会话种子长度,与核心层 SWX_GATE_SEED_LEN 一致(swx_session.h)。 */
+const val GATE_SEED_LEN = 64
+
+/** 公共会话 (§5/§15): a session frozen in pairing state — a standing door
+ *  with a 静态邀请码. Holds the gate seed (64B CSPRNG output captured once
+ *  at creation, NEVER derived from the 暗号 — §8: a 暗号-derived scalar
+ *  would turn leakage into impersonation) and the 暗号 itself, both sealed
+ *  in the Tink envelope (§6: creation is the explicit save act). No state
+ *  blob, history, ledger or counters: at runtime the armed ctx is a
+ *  standard inviter session that graduates into an ordinary client chat
+ *  on finish — the door never chats, only the rooms it births do. */
+data class PublicSession(
+    val id: String,
+    var name: String,
+    val gateSeed: ByteArray,
+    val gateSecret: ByteArray,
+    val createdMs: Long,
+    var lastUsedMs: Long,
+) {
+    fun toJson(): JSONObject = JSONObject().apply {
+        put("v", 1)
+        put("kind", "public")
+        put("name", name)
+        put("seed", b64(gateSeed))
+        put("secret", b64(gateSecret))
+        put("created", createdMs)
+        put("lastUsed", lastUsedMs)
+    }
+
+    companion object {
+        fun fromJson(id: String, o: JSONObject): PublicSession = PublicSession(
+            id = id,
+            name = o.getString("name"),
+            gateSeed = unb64(o.getString("seed")),
+            gateSecret = unb64(o.getString("secret")),
+            createdMs = o.getLong("created"),
+            lastUsedMs = o.optLong("lastUsed", o.getLong("created")),
+        )
+    }
+}

@@ -57,6 +57,57 @@ public class JniSmoke {
         WaxNative.freeSession(f1);
         WaxNative.freeSession(f2);
 
+        /* 公共会话 (§5): a fixed gate seed reproduces a byte-identical
+         * static invite across independent armed sessions; a client pairs
+         * against it through the ordinary join path, and a second client
+         * against a re-armed gate gets an independent key (cross-open
+         * dies at the masked header) and a fresh SAS. */
+        java.util.Base64.Encoder enc = java.util.Base64.getEncoder();
+        byte[] seed = new byte[64];
+        for (int i = 0; i < 64; i++) seed[i] = (byte) (i * 11 + 3);
+        String seedB64 = enc.encodeToString(seed);
+        long g1 = WaxNative.createSession(true);
+        String code1 = WaxNative.inviteSeeded(g1, secret, seedB64);
+        check(code1 != null && code1.length() == 44, "static invite len");
+        long g2 = WaxNative.createSession(true);
+        check(code1.equals(WaxNative.inviteSeeded(g2, secret, seedB64)),
+              "static invite reproducible");
+        WaxNative.freeSession(g2);
+        long c1 = WaxNative.createSession(false);
+        String rep1 = WaxNative.reply(c1, code1, secret);
+        WaxNative.finish(g1, rep1);
+        String sasG1 = WaxNative.sas(g1);
+        check(sasG1.equals(WaxNative.sas(c1)), "gate sas equal");
+        long g3 = WaxNative.createSession(true);
+        check(code1.equals(WaxNative.inviteSeeded(g3, secret, seedB64)),
+              "static invite survives graduation");
+        long c2 = WaxNative.createSession(false);
+        String rep2 = WaxNative.reply(c2, code1, secret);
+        WaxNative.finish(g3, rep2);
+        check(!sasG1.equals(WaxNative.sas(g3)), "per-client fresh sas");
+        byte[] gm = "仅客户1可见".getBytes("UTF-8");
+        String[] gateMsg = WaxNative.sealText(g1, gm);
+        try {
+            WaxNative.openText(c2, gateMsg[0]);
+            check(false, "cross-session open must throw");
+        } catch (IllegalStateException e) {
+            check("SWX_E_FORMAT".equals(e.getMessage()),
+                  "cross-session code " + e.getMessage());
+        }
+        long gb = WaxNative.createSession(true);
+        try {
+            WaxNative.inviteSeeded(gb, secret, "not-base64!");
+            check(false, "bad seed must throw");
+        } catch (IllegalStateException e) {
+            check(e.getMessage() != null && e.getMessage().startsWith("SWX_E_"),
+                  "bad seed code " + e.getMessage());
+        }
+        WaxNative.freeSession(gb);
+        WaxNative.freeSession(g1);
+        WaxNative.freeSession(c1);
+        WaxNative.freeSession(g3);
+        WaxNative.freeSession(c2);
+
         /* text roundtrip */
         byte[] msg = "hello 火漆 via JNI".getBytes("UTF-8");
         String[] pieces = WaxNative.sealText(a, msg);

@@ -80,19 +80,49 @@ object Persistence {
         runCatching { SavedSession.fromJson(id, readEnvelope(context, id)) }.getOrNull()
 
     fun saveSession(context: Context, s: SavedSession) {
-        val dir = sessionDir(context, s.id).apply { mkdirs() }
-        val plaintext = s.toJson().toString().toByteArray(Charsets.UTF_8)
-        val sealed = aead(context).encrypt(plaintext, s.id.toByteArray(Charsets.UTF_8))
+        writeEnvelope(context, s.id, s.toJson().toString().toByteArray(Charsets.UTF_8))
+    }
+
+    /* ---- 公共会话 (§5/§15): same envelope layout, kind-discriminated.
+     *  chat envelopes lack "kind" on old saves and default to "chat". */
+
+    fun listPublicSessions(context: Context): List<PublicSession> =
+        sessionsRoot(context).listFiles { f -> f.isDirectory }
+            ?.sortedBy { it.name }
+            ?.mapNotNull { dir ->
+                runCatching {
+                    val o = readEnvelope(context, dir.name)
+                    if (o.optString("kind", "chat") != "public") null
+                    else PublicSession.fromJson(dir.name, o)
+                }.getOrNull()
+            }
+            .orEmpty()
+
+    fun readPublicSession(context: Context, id: String): PublicSession? =
+        runCatching {
+            val o = readEnvelope(context, id)
+            check(o.optString("kind", "chat") == "public")
+            PublicSession.fromJson(id, o)
+        }.getOrNull()
+
+    fun savePublicSession(context: Context, p: PublicSession) {
+        writeEnvelope(context, p.id, p.toJson().toString().toByteArray(Charsets.UTF_8))
+    }
+
+    fun deleteSession(context: Context, id: String) {
+        sessionDir(context, id).deleteRecursively()
+    }
+
+    /** Tink AEAD over the object JSON, atomically written (tmp + rename). */
+    private fun writeEnvelope(context: Context, id: String, plaintext: ByteArray) {
+        val dir = sessionDir(context, id).apply { mkdirs() }
+        val sealed = aead(context).encrypt(plaintext, id.toByteArray(Charsets.UTF_8))
         val tmp = File(dir, "envelope.tmp")
         tmp.writeBytes(sealed)
         if (!tmp.renameTo(File(dir, "envelope"))) {
             tmp.delete()
             error("envelope rename failed")
         }
-    }
-
-    fun deleteSession(context: Context, id: String) {
-        sessionDir(context, id).deleteRecursively()
     }
 
     private fun readEnvelope(context: Context, id: String): JSONObject {

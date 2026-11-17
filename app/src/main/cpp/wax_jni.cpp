@@ -140,6 +140,54 @@ Java_sealing_wax_bridge_WaxNative_invite(JNIEnv *env, jclass, jlong h,
     return env->NewStringUTF(b64);
 }
 
+/* 公共会话 (§5): deterministic inviter share from a persisted gate seed —
+ * the same (seed, 暗号) reproduces a byte-identical static invite code
+ * every arming. Key material is zeroed after use. */
+extern "C" JNIEXPORT jstring JNICALL
+Java_sealing_wax_bridge_WaxNative_inviteSeeded(JNIEnv *env, jclass, jlong h,
+                                               jbyteArray secret, jstring seed_b64)
+{
+    const char *sb = env->GetStringUTFChars(seed_b64, NULL);
+    if (sb == NULL) {
+        return NULL;
+    }
+    size_t sb_len = strlen(sb);
+    uint8_t seed[SWX_GATE_SEED_LEN];
+    uint8_t sec[SWX_PAIR_SECRET_MAX];
+    uint8_t wire[SWX_PAIR_MSG_LEN];
+    char b64[B64_PAIR_CAP];
+    size_t seed_len = 0, sec_len = 0, n = 0;
+    jstring out = NULL;
+    int ret;
+
+    ret = swx_b64_decode(seed, sizeof seed, &seed_len, sb, sb_len);
+    if (ret == SWX_OK && seed_len != SWX_GATE_SEED_LEN) {
+        ret = SWX_E_FORMAT;
+    }
+    if (ret == SWX_OK && secret != NULL) {
+        ret = secret_to_buf(env, secret, sec, sizeof sec, &sec_len);
+    } else if (ret == SWX_OK) {
+        ret = SWX_E_ARG;
+    }
+    if (ret == SWX_OK) {
+        ret = swx_session_invite_seeded((swx_session *) (intptr_t) h,
+                                        sec, sec_len, seed,
+                                        wire, sizeof wire, &n);
+    }
+    if (ret == SWX_OK) {
+        ret = swx_b64_encode(b64, sizeof b64, wire, n);
+    }
+    if (ret == SWX_OK) {
+        out = env->NewStringUTF(b64);
+    } else {
+        throw_swx(env, ret);
+    }
+    sodium_memzero(sec, sizeof sec);
+    sodium_memzero(seed, sizeof seed);
+    env->ReleaseStringUTFChars(seed_b64, sb);
+    return out;
+}
+
 extern "C" JNIEXPORT jstring JNICALL
 Java_sealing_wax_bridge_WaxNative_reply(JNIEnv *env, jclass, jlong h,
                                         jstring invite_b64, jbyteArray secret)

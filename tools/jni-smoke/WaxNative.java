@@ -8,6 +8,7 @@ public class WaxNative {
     public static native void freeSession(long h);
     public static native int sessionRole(long h);
     public static native String invite(long h, byte[] secret);
+    public static native String inviteSeeded(long h, byte[] secret, String seedB64);
     public static native String reply(long h, String inviteB64, byte[] secret);
     public static native void finish(long h, String replyB64);
     public static native String sas(long h);

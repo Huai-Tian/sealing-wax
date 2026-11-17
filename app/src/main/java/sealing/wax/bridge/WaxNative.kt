@@ -39,6 +39,14 @@ object WaxNative {
      *  by the 暗号. The 暗号 never crosses the wire. */
     external fun invite(h: Long, secret: ByteArray): String
 
+    /** 公共会话 (§5): invite with the private scalar derived deterministically
+     *  from seedB64 (64B) instead of a fresh CSPRNG draw — the same
+     *  (seed, 暗号) reproduces a byte-identical static invite code every
+     *  arming. Identical upstream pipeline (spake2 integration change #5);
+     *  the seed is 64B CSPRNG output captured once at gate creation and
+     *  never derived from the 暗号 (§8). */
+    external fun inviteSeeded(h: Long, secret: ByteArray, seedB64: String): String
+
     /** Consumes the invite with the SAME 暗号, returns the reply code
      *  (base64, 88 chars): 32B share || 32B HKDF confirm. */
     external fun reply(h: Long, inviteB64: String, secret: ByteArray): String

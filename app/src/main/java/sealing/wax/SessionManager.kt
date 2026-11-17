@@ -15,13 +15,17 @@ import android.content.Context
 import sealing.wax.bridge.WaxNative
 import sealing.wax.store.DIR_RECEIVED
 import sealing.wax.store.DIR_SENT
+import sealing.wax.store.GATE_SEED_LEN
 import sealing.wax.store.HistoryEntry
 import sealing.wax.store.LedgerEntry
 import sealing.wax.store.Persistence
+import sealing.wax.store.PublicSession
 import sealing.wax.store.SavedSession
+import sealing.wax.store.b64
 import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
+import java.security.SecureRandom
 import java.util.UUID
 import org.json.JSONObject
 
@@ -145,6 +149,46 @@ object SessionManager {
 
     fun abortPairing() {
         freeConversation()
+    }
+
+    /* ---- 公共会话 (§5/§15): 静态邀请码门禁 ---- */
+
+    /** 创建即显式保存(§6 例外族:创建持久对象的动作本身就是保存)。
+     *  种子 64B 一次性 CSPRNG,绝不从暗号派生(§8:暗号派生标量 =
+     *  泄露即冒充本端)。此后 (种子, 暗号) 恒等复现同一静态邀请码。 */
+    fun createPublicSession(name: String, secret: ByteArray) {
+        val seed = ByteArray(GATE_SEED_LEN).also { SecureRandom().nextBytes(it) }
+        val now = System.currentTimeMillis()
+        Persistence.savePublicSession(
+            ctx(),
+            PublicSession(
+                id = UUID.randomUUID().toString().replace("-", "").substring(0, 16),
+                name = name.ifBlank { str(R.string.unnamed_session) },
+                gateSeed = seed,
+                gateSecret = secret.copyOf(),
+                createdMs = now,
+                lastUsedMs = now,
+            ),
+        )
+    }
+
+    /** 打开即武装:种子派生的标准 inviter 会话 + 恒等静态邀请码(44 字符,
+     *  与核心层 swx_session_invite_seeded 对应)。已有 live(对话或配对)
+     *  先释放——门禁屏与其他屏互斥,同既有配对入口的语义。
+     *  粘贴客户回复码走 completeInvite(finish);成功后 armed ctx 直接
+     *  毕业为普通客户会话(beginConversation 照常),再武装由下次打开
+     *  完成——退出屏即焚毁,门禁运行时零驻留状态。错误的回复码被
+     *  3ee0222 回滚,武装原地再战。 */
+    fun armPublicSession(context: Context, id: String): String {
+        val p = Persistence.readPublicSession(context, id) ?: error("会话不存在")
+        freeConversation()
+        handle = WaxNative.createSession(true)
+        pairing = true
+        sas = null
+        val code = WaxNative.inviteSeeded(handle, p.gateSecret, b64(p.gateSeed))
+        p.lastUsedMs = System.currentTimeMillis()
+        Persistence.savePublicSession(context, p)
+        return code
     }
 
     /* ---- conversation entry / exit ---- */
