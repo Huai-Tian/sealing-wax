@@ -65,8 +65,6 @@
     <string name="chat_menu_cd">更多</string>
     <string name="chat_partial_note">已收 %1$d/%2$d 片,继续粘贴其余分片…</string>
     <string name="chat_pieces_badge"> · %1$d 片</string>
-    <string name="chat_dir_sent">我发出</string>
-    <string name="chat_dir_received">我收到</string>
 
     <!-- chat: menu / length padding (one-row dropdown, 6th batch) -->
     <string name="menu_length_padding">长度混淆</string>
@@ -84,15 +82,9 @@
     <!-- chat: file channel -->
     <string name="busy_encrypting">正在加密文件…</string>
     <string name="share_chooser">分享密文文件到 IM</string>
-    <string name="busy_verifying">正在对账…</string>
-    <string name="verdict_match">✓ 就是当时那条:%1$s(%2$d B,%3$s)</string>
-    <string name="verdict_mismatch">✗ 不是当初的文件(账本中没有这个 hash)</string>
-    <string name="verdict_no_ledger">本会话没有账本记录,跳过对账</string>
     <string name="busy_decrypting">正在解密…</string>
     <string name="decrypted_exported">已解密导出</string>
-    <string name="swx_dialog_title">对账结果</string>
     <string name="busy_reading_name">正在读取文件名…</string>
-    <string name="decrypt_export_btn">解密并导出</string>
 
     <!-- chat: SAS dialog -->
     <string name="sas_dialog_title">身份验证码</string>

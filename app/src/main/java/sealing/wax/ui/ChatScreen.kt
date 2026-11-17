@@ -11,7 +11,6 @@
  */
 package sealing.wax.ui
 
-import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.OpenableColumns
@@ -87,7 +86,6 @@ import sealing.wax.FileMeta
 import sealing.wax.OpenResult
 import sealing.wax.R
 import sealing.wax.SessionManager
-import sealing.wax.SwxVerdict
 import sealing.wax.UiMessage
 import sealing.wax.store.DIR_SENT
 import java.io.File
@@ -125,7 +123,6 @@ fun ChatScreen(
     var saveNowOpen by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf<String?>(null) }
     var pendingSwx by remember { mutableStateOf<Uri?>(null) }
-    var swxVerdict by remember { mutableStateOf<String?>(null) }
     var swxHash by remember { mutableStateOf<ByteArray?>(null) }
 
     val sas = SessionManager.sas
@@ -218,42 +215,8 @@ fun ChatScreen(
         }
     }
 
-    /* 收文件 pass 1:SAF 选 .swx → 整流 hash → 账本对账 */
-    val pickSwx = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument()
-    ) { uri ->
-        if (uri != null) scope.launch {
-            try {
-                busy = context.getString(R.string.busy_verifying)
-                val hash = withContext(Dispatchers.IO) {
-                    context.contentResolver.openInputStream(uri)!!.use {
-                        SessionManager.inspectSwx(it)
-                    }
-                }
-                swxHash = hash
-                swxVerdict = when (val v = SessionManager.verdictFor(hash)) {
-                    is SwxVerdict.Matched -> context.getString(
-                        R.string.verdict_match, v.entry.name, v.entry.size,
-                        dirLabel(context, v.entry.dir),
-                    )
-                    SwxVerdict.Mismatch -> context.getString(R.string.verdict_mismatch)
-                    SwxVerdict.NoLedger -> context.getString(R.string.verdict_no_ledger)
-                }
-                pendingSwx = uri
-                busy = null
-            } catch (e: Exception) {
-                busy = null
-                Log.w("SealingWax", "inspect swx failed", e)
-                Toast.makeText(
-                    context,
-                    SessionManager.stableError(context.getString(R.string.err_read_failed), e),
-                    Toast.LENGTH_LONG,
-                ).show()
-            }
-        }
-    }
-
-    /* 收文件 pass 2:SAF 选导出目标 → 解密导出(明文只经过流) */
+    /* 收文件 pass 2:SAF 选导出目标 → 解密导出(明文只经过流)。声明在
+     * pass 1 之前——pass 1 完成后直接 launch 它 */
     val pickTarget = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/octet-stream")
     ) { uri ->
@@ -270,7 +233,7 @@ fun ChatScreen(
                     }
                 }
                 pendingSwx = null
-                swxVerdict = null
+                swxHash = null
                 busy = null
                 Toast.makeText(
                     context, context.getString(R.string.decrypted_exported), Toast.LENGTH_SHORT,
@@ -281,6 +244,43 @@ fun ChatScreen(
                 Toast.makeText(
                     context,
                     SessionManager.stableError(context.getString(R.string.err_decrypt_failed), e),
+                    Toast.LENGTH_LONG,
+                ).show()
+            }
+        }
+    }
+
+    /* 收文件 pass 1:SAF 选 .swx → 整流 hash(记账依据) → 读文件名 → 直接
+     * 进入导出目标选择。确认弹窗已移除(所有者指示):用户既然导入就是要
+     * 解密,"账上没有"是首次收文件的常态,提示与二次确认都无意义 */
+    val pickSwx = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) scope.launch {
+            try {
+                busy = context.getString(R.string.busy_reading_name)
+                val hash = withContext(Dispatchers.IO) {
+                    context.contentResolver.openInputStream(uri)!!.use {
+                        SessionManager.inspectSwx(it)
+                    }
+                }
+                swxHash = hash
+                pendingSwx = uri
+                val meta = withContext(Dispatchers.IO) {
+                    context.contentResolver.openInputStream(uri)!!.use {
+                        SessionManager.peekSwxMeta(it)
+                    }
+                }
+                busy = null
+                pickTarget.launch(meta.name)
+            } catch (e: Exception) {
+                busy = null
+                pendingSwx = null
+                swxHash = null
+                Log.w("SealingWax", "inspect swx failed", e)
+                Toast.makeText(
+                    context,
+                    SessionManager.stableError(context.getString(R.string.err_read_failed), e),
                     Toast.LENGTH_LONG,
                 ).show()
             }
@@ -657,47 +657,6 @@ fun ChatScreen(
         )
     }
 
-    /* inbound .swx: verdict → peek name → export target */
-    if (pendingSwx != null) {
-        AlertDialog(
-            onDismissRequest = { pendingSwx = null; swxVerdict = null },
-            title = { Text(stringResource(R.string.swx_dialog_title)) },
-            text = { Text(swxVerdict ?: "…") },
-            confirmButton = {
-                TextButton(onClick = {
-                    val src = pendingSwx
-                    if (src != null) scope.launch {
-                        try {
-                            busy = context.getString(R.string.busy_reading_name)
-                            val meta = withContext(Dispatchers.IO) {
-                                context.contentResolver.openInputStream(src)!!.use {
-                                    SessionManager.peekSwxMeta(it)
-                                }
-                            }
-                            busy = null
-                            pickTarget.launch(meta.name)
-                        } catch (e: Exception) {
-                            busy = null
-                            Log.w("SealingWax", "peek swx meta failed", e)
-                            Toast.makeText(
-                                context,
-                                SessionManager.stableError(
-                                    context.getString(R.string.err_read_failed), e,
-                                ),
-                                Toast.LENGTH_LONG,
-                            ).show()
-                        }
-                    }
-                }) { Text(stringResource(R.string.decrypt_export_btn)) }
-            },
-            dismissButton = {
-                TextButton(onClick = { pendingSwx = null; swxVerdict = null }) {
-                    Text(stringResource(R.string.common_cancel))
-                }
-            },
-        )
-    }
-
     busy?.let { b ->
         AlertDialog(
             onDismissRequest = {},
@@ -736,9 +695,6 @@ private fun MessageBubble(m: UiMessage) {
         }
     }
 }
-
-private fun dirLabel(context: Context, dir: Int): String =
-    context.getString(if (dir == DIR_SENT) R.string.chat_dir_sent else R.string.chat_dir_received)
 
 /** "+"面板入口磁贴(微信式):方形图标 + 标签;未来特殊消息加格即可。 */
 @Composable

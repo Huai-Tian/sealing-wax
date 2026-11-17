@@ -67,8 +67,6 @@
     <string name="chat_menu_cd">More</string>
     <string name="chat_partial_note">Got %1$d/%2$d pieces — keep pasting the rest…</string>
     <string name="chat_pieces_badge"> · %1$d pieces</string>
-    <string name="chat_dir_sent">sent by me</string>
-    <string name="chat_dir_received">received by me</string>
 
     <!-- chat: menu / length padding (one-row dropdown, 6th batch) -->
     <string name="menu_length_padding">Length padding</string>
@@ -86,15 +84,9 @@
     <!-- chat: file channel -->
     <string name="busy_encrypting">Encrypting file…</string>
     <string name="share_chooser">Share the sealed file to IM</string>
-    <string name="busy_verifying">Checking against ledger…</string>
-    <string name="verdict_match">✓ This is the original: %1$s (%2$d B, %3$s)</string>
-    <string name="verdict_mismatch">✗ Not the original file (hash not in the ledger)</string>
-    <string name="verdict_no_ledger">No ledger records for this session, check skipped</string>
     <string name="busy_decrypting">Decrypting…</string>
     <string name="decrypted_exported">Decrypted and exported</string>
-    <string name="swx_dialog_title">Ledger check</string>
     <string name="busy_reading_name">Reading file name…</string>
-    <string name="decrypt_export_btn">Decrypt and export</string>
 
     <!-- chat: SAS dialog -->
     <string name="sas_dialog_title">Verification number</string>

@@ -235,6 +235,32 @@ public class JniSmoke {
             check("SWX_E_CRYPTO".equals(e.getMessage()), "tamper code " + e.getMessage());
         }
 
+        /* file re-import idempotency (decryptSwx fix): a live open consumed
+         * the counter above, so a second live open of the same frame replays
+         * (the old in-app bug); decryptSwx now opens on a fresh throwaway
+         * mirror per import (exportState -> importState with counters pinned
+         * at 1/0), which is idempotent, and the mirrors never touch the
+         * live session's high-water — a newer frame still opens live */
+        try {
+            WaxNative.openFileFrame(b, frame);
+            check(false, "second live open should REPLAY");
+        } catch (IllegalStateException e) {
+            check("SWX_E_REPLAY".equals(e.getMessage()), "live re-open code " + e.getMessage());
+        }
+        long bMirror = WaxNative.importState(WaxNative.exportState(b), 1, 0);
+        check(java.util.Arrays.equals(WaxNative.openFileFrame(bMirror, frame), pt),
+              "mirror re-import bytes");
+        WaxNative.freeSession(bMirror);
+        long bMirror2 = WaxNative.importState(WaxNative.exportState(b), 1, 0);
+        check(java.util.Arrays.equals(WaxNative.openFileFrame(bMirror2, frame), pt),
+              "mirror re-import again");
+        WaxNative.freeSession(bMirror2);
+        long se3 = WaxNative.fileSealBegin(a, meta, 3);
+        byte[] newer = WaxNative.fileSealChunk(se3, new byte[]{9, 8, 7});
+        WaxNative.fileSealFree(se3);
+        check(WaxNative.openFileFrame(b, newer).length >= 4 + meta.length + 3,
+              "live accepts newer frame");
+
         WaxNative.freeSession(a);
         WaxNative.freeSession(b);
         System.out.println(failures == 0 ? "JNI SMOKE: ALL PASSED" : "JNI SMOKE: " + failures + " failure(s)");

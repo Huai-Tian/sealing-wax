@@ -49,15 +49,6 @@ data class FileMeta(val name: String, val size: Long)
 
 data class SwxDecryption(val meta: FileMeta, val bytesWritten: Long)
 
-sealed interface SwxVerdict {
-    /** Ledger entry matched: “就是当时那条”. */
-    data class Matched(val entry: LedgerEntry) : SwxVerdict
-    /** This session has ledger entries but none matches: “不是当初的文件”. */
-    data object Mismatch : SwxVerdict
-    /** Nothing to reconcile against (unsaved conversation / empty ledger). */
-    data object NoLedger : SwxVerdict
-}
-
 /**
  * Runtime hub: one live conversation (saved or unsaved), the pairing state
  * machine, counter prepayment, history walking and file streaming. All
@@ -494,14 +485,6 @@ object SessionManager {
         return digest
     }
 
-    /** Verdict against this conversation's ledger (§7 对账). */
-    fun verdictFor(hash: ByteArray): SwxVerdict {
-        val s = saved ?: return SwxVerdict.NoLedger
-        if (s.ledger.isEmpty()) return SwxVerdict.NoLedger
-        val hit = s.ledger.lastOrNull { it.hash.contentEquals(hash) }
-        return if (hit != null) SwxVerdict.Matched(hit) else SwxVerdict.Mismatch
-    }
-
     /**
      * Reads the encrypted metadata of the first chunk WITHOUT touching the
      * live session's high-water: a throwaway import does the decrypt and is
@@ -530,7 +513,13 @@ object SessionManager {
     /**
      * Pass 2: decrypt the .swx stream, trim by the encrypted size metadata,
      * write plaintext to [out], and record the inbound ledger entry using
-     * the pass-1 [hash]. Plaintext exists only in the stream.
+     * the pass-1 [hash]. Decrypts on a throwaway mirror of the session state
+     * (counters pinned at 1/0 — the peek/history pattern): the live session's
+     * high-water is never touched by file imports, so re-importing the same
+     * .swx any number of times succeeds (the old live-handle path replayed
+     * consumed counters and failed with SWX_E_REPLAY). The ledger entry is
+     * deduped by hash — re-exports of the same byte stream are not new
+     * events. Plaintext exists only in the stream.
      */
     fun decryptSwx(
         input: InputStream,
@@ -539,6 +528,8 @@ object SessionManager {
         onProgress: (Long) -> Unit = {},
     ): SwxDecryption {
         require(handle != 0L) { "没有活跃会话" }
+        val blob = WaxNative.exportState(handle)
+        val scratch = WaxNative.importState(blob, 1, 0)
         val reader = SwxReader(input)
         var meta: FileMeta? = null
         var remaining = 0L
@@ -547,51 +538,57 @@ object SessionManager {
         var total = -1L
         var counter = 0L
         var fp = ByteArray(16)
-        while (true) {
-            val frame = reader.nextFrame() ?: break
-            val pt = WaxNative.openFileFrame(handle, frame)
-            val info = WaxNative.lastFrame(handle)
-            if (total < 0) {
-                total = info[2]
-                require(total >= 1) { "分片数非法" }
-            } else if (info[2] != total) {
-                error("总分片数不一致")
+        try {
+            while (true) {
+                val frame = reader.nextFrame() ?: break
+                val pt = WaxNative.openFileFrame(scratch, frame)
+                val info = WaxNative.lastFrame(scratch)
+                if (total < 0) {
+                    total = info[2]
+                    require(total >= 1) { "分片数非法" }
+                } else if (info[2] != total) {
+                    error("总分片数不一致")
+                }
+                if (info[1] != expectedIdx) error("分片乱序或缺失")
+                if (meta == null) {
+                    val metaLen = ((pt[0].toInt() and 0xff) shl 24) or
+                        ((pt[1].toInt() and 0xff) shl 16) or
+                        ((pt[2].toInt() and 0xff) shl 8) or
+                        (pt[3].toInt() and 0xff)
+                    require(metaLen in 1..pt.size - 4) { "元数据损坏" }
+                    val mo = JSONObject(String(pt, 4, metaLen, Charsets.UTF_8))
+                    val m = FileMeta(mo.getString("name"), mo.getLong("size"))
+                    val start = 4 + metaLen
+                    remaining = m.size
+                    val take = minOf((pt.size - start).toLong(), remaining)
+                    out.write(pt, start, (start + take).toInt())
+                    remaining -= take
+                    written += take
+                    meta = m
+                    counter = info[0]
+                    fp = WaxNative.lastFp(scratch)
+                } else {
+                    val take = minOf(pt.size.toLong(), remaining)
+                    if (take > 0) out.write(pt, 0, take.toInt())
+                    remaining -= take
+                    written += take
+                }
+                expectedIdx++
+                onProgress(written)
             }
-            if (info[1] != expectedIdx) error("分片乱序或缺失")
-            if (meta == null) {
-                val metaLen = ((pt[0].toInt() and 0xff) shl 24) or
-                    ((pt[1].toInt() and 0xff) shl 16) or
-                    ((pt[2].toInt() and 0xff) shl 8) or
-                    (pt[3].toInt() and 0xff)
-                require(metaLen in 1..pt.size - 4) { "元数据损坏" }
-                val mo = JSONObject(String(pt, 4, metaLen, Charsets.UTF_8))
-                val m = FileMeta(mo.getString("name"), mo.getLong("size"))
-                val start = 4 + metaLen
-                remaining = m.size
-                val take = minOf((pt.size - start).toLong(), remaining)
-                out.write(pt, start, (start + take).toInt())
-                remaining -= take
-                written += take
-                meta = m
-                counter = info[0]
-                fp = WaxNative.lastFp(handle)
-            } else {
-                val take = minOf(pt.size.toLong(), remaining)
-                if (take > 0) out.write(pt, 0, take.toInt())
-                remaining -= take
-                written += take
-            }
-            expectedIdx++
-            onProgress(written)
+            out.flush()
+        } finally {
+            WaxNative.freeSession(scratch)
         }
-        out.flush()
         val m = meta ?: error("空的 .swx 文件")
         require(expectedIdx == total) { "文件不完整(缺分片)" }
         require(remaining == 0L) { "文件不完整(数据不足)" }
         saved?.let {
-            it.ledger.add(
-                LedgerEntry(m.name, hash, fp, m.size, DIR_RECEIVED, counter, System.currentTimeMillis())
-            )
+            if (it.ledger.none { e -> e.dir == DIR_RECEIVED && e.hash.contentEquals(hash) }) {
+                it.ledger.add(
+                    LedgerEntry(m.name, hash, fp, m.size, DIR_RECEIVED, counter, System.currentTimeMillis())
+                )
+            }
             it.lastUsedMs = System.currentTimeMillis()
             dirty = true
         }
