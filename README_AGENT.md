@@ -493,6 +493,30 @@ trademark_note: "发布前做类别 9/42 商标检索;英文表述永远用'两�
 
 ### 2.0-draft 之后(实现期变更)
 
+- **2026-11 收文件首帧 write off/len BUG(根因修复,真机两轮定位)**:真机
+  反馈"仅解密失败"(两轮均无附码)。根因——decryptSwx 首帧导出
+  `out.write(pt, start, (start+take).toInt())` 把**结束偏移**当**长度**传:
+  off+len 越界抛 IndexOutOfBoundsException 且无 message → stableError
+  仅显前缀(SWX_E_* 才附码,无 message 的异常是仪表盲区)。两种形态:
+  首帧装满(常规文件)即抛越界;单帧+混淆(首帧未满)不抛但**静默错位**
+  (导出开头混入 meta 头字节,内容损坏)。自文件通道首次实现即存在,
+  与 IM 传输/密钥/Download 权限均无关;真机确认为唯一根因。修复一行:
+  len 改传 take.toInt(),注释钉死 write(buf, off, LEN) 语义;全文件
+  off/len 审计: String(pt,4,metaLen)/hashUpdate(0,n)/write(pt,0,take)
+  均正确,仅此一处。**随修复保留的两件(超出本次 BUG 的长期价值)**:
+  ① 文件通道平台层断言稳定码化——SWX_E_TRUNCATED(截断/缺片/数据
+  不足)/SWX_E_ORDER(分片数非法/总数不一致/乱序缺失)/SWX_E_META
+  (元数据损坏/JSON 解析失败/发侧 SIZE 不可得)/SWX_E_EMPTY(空容器)/
+  SWX_E_SRC_SHORT(发侧源短于声明),JSON 解析 runCatching 包裹——
+  §9"稳定代码上屏"原则在文件通道平台层的补齐,后期报错一步定位
+  (本次即靠"无附码"排除断言层完成定位);② JniSmoke containerRoundtrip
+  ——1:1 复刻 sealFile/inspectSwx/peekSwxMeta/decryptSwx/SwxReader 的
+  容器往返,四变体(多帧 20MB 跨 8MiB 边界/单帧 × 无混淆/有混淆,
+  单帧+混淆=末片补满 8MiB 桶,容器 8388678B),文件通道唯一 host 端到端
+  回归防护;首帧 write 行注记 byte-faithful——复刻不走样曾把真实
+  off/len bug 藏在本测试眼皮底下。四变体 + 冒烟 ALL PASSED,
+  host CTest 4/4。纯平台层,协议/KPI 不受影响
+
 - **2026-11 收文件修复两件**(所有者指示):① 对账确认弹窗移除——首次
   收文件"账上没有"是常态(账在解密后才记),提示无意义;用户既然导入
   就是要解密,直通:hash(记账)→ 读名 → 选导出位置 → 解密导出。

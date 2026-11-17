@@ -6,6 +6,149 @@ public class JniSmoke {
         if (!c) { System.out.println("FAIL: " + what); failures++; }
     }
 
+    /* ---- full .swx container round-trip (on-device file transfer was never
+     * host-covered; replays the app's sealFile / inspectSwx / peekSwxMeta /
+     * decryptSwx / SwxReader logic 1:1). Fresh pairing, one text message
+     * first (counter consumption), then the file: multi-chunk (> 8 MiB) or
+     * single-chunk, plain or padded (the padded single chunk blows up to
+     * the full 8 MiB bucket). ---- */
+    static void containerRoundtrip(byte[] secret, boolean padding, int fileLen,
+                                   int expectChunks, String label) throws Exception {
+        long sa = WaxNative.createSession(true);
+        long sb = WaxNative.createSession(false);
+        String inv = WaxNative.invite(sa, secret);
+        WaxNative.finish(sa, WaxNative.reply(sb, inv, secret));
+        check(WaxNative.sas(sa).equals(WaxNative.sas(sb)), label + ": sas");
+        if (padding) WaxNative.setPadding(sa, true, 200);
+
+        /* one text message first: real conversations consume counters
+         * before any file goes out */
+        WaxNative.sealText(sa, "hi before file".getBytes("UTF-8"));
+
+        /* sealFile: [4B BE len][frame] * n */
+        byte[] fileData = new byte[fileLen];
+        for (int i = 0; i < fileLen; i++) fileData[i] = (byte) (i * 31 + 7);
+        String metaJson = "{\"name\":\"big.bin\",\"size\":" + fileLen + "}";
+        java.io.ByteArrayOutputStream swx = new java.io.ByteArrayOutputStream();
+        long se = WaxNative.fileSealBegin(sa, metaJson.getBytes("UTF-8"), fileLen);
+        check(se != 0, label + ": seal begin");
+        int chunks = 0;
+        java.io.ByteArrayInputStream fin = new java.io.ByteArrayInputStream(fileData);
+        while (!WaxNative.fileSealDone(se)) {
+            int room = WaxNative.fileChunkRoom(se);
+            byte[] buf = new byte[room];
+            for (int got = 0; got < room; ) {
+                int n = fin.read(buf, got, room - got);
+                if (n < 0) throw new IllegalStateException("source shorter than declared");
+                got += n;
+            }
+            byte[] fr = WaxNative.fileSealChunk(se, buf);
+            chunks++;
+            swx.write((fr.length >>> 24) & 0xff);
+            swx.write((fr.length >>> 16) & 0xff);
+            swx.write((fr.length >>> 8) & 0xff);
+            swx.write(fr.length & 0xff);
+            swx.write(fr);
+        }
+        WaxNative.fileSealFree(se);
+        check(chunks == expectChunks, label + ": chunk count " + chunks);
+
+        /* inspectSwx: BLAKE2b over the whole container */
+        byte[] container = swx.toByteArray();
+        long hh = WaxNative.hashCreate();
+        WaxNative.hashUpdate(hh, container, 0, container.length);
+        byte[] hash = WaxNative.hashFinal(hh);
+        WaxNative.hashFree(hh);
+        check(hash != null && hash.length == 32, label + ": hash len");
+
+        /* peekSwxMeta: scratch #1 reads the first frame only */
+        java.io.ByteArrayInputStream cin = new java.io.ByteArrayInputStream(container);
+        byte[] hdr = new byte[4];
+        check(cin.read(hdr, 0, 4) == 4, label + ": peek prefix");
+        int flen = ((hdr[0] & 0xff) << 24) | ((hdr[1] & 0xff) << 16) | ((hdr[2] & 0xff) << 8) | (hdr[3] & 0xff);
+        check(flen >= 66 && flen <= 8 * 1024 * 1024 + 82, label + ": peek record len " + flen);
+        byte[] first = new byte[flen];
+        for (int got = 0; got < flen; ) {
+            int n = cin.read(first, got, flen - got);
+            if (n < 0) throw new IllegalStateException("peek truncated");
+            got += n;
+        }
+        long peekScratch = WaxNative.importState(WaxNative.exportState(sb), 1, 0);
+        byte[] ppt = WaxNative.openFileFrame(peekScratch, first);
+        WaxNative.freeSession(peekScratch);
+        int pml = ((ppt[0] & 0xff) << 24) | ((ppt[1] & 0xff) << 16) | ((ppt[2] & 0xff) << 8) | (ppt[3] & 0xff);
+        check(pml >= 1 && pml <= ppt.length - 4, label + ": peek meta len " + pml);
+        String pm = new String(ppt, 4, pml, "UTF-8");
+        check(pm.contains("\"big.bin\"") && pm.contains(String.valueOf(fileLen)),
+              label + ": peek meta " + pm);
+
+        /* decryptSwx: scratch #2, the SwxReader walk with every Kotlin
+         * assertion replayed */
+        cin = new java.io.ByteArrayInputStream(container);
+        long mirror = WaxNative.importState(WaxNative.exportState(sb), 1, 0);
+        java.io.ByteArrayOutputStream plain = new java.io.ByteArrayOutputStream();
+        long remaining = -1, written = 0, expectedIdx = 0, total = -1;
+        String seenMeta = null;
+        try {
+            while (cin.read(hdr, 0, 4) == 4) {
+                int len = ((hdr[0] & 0xff) << 24) | ((hdr[1] & 0xff) << 16) | ((hdr[2] & 0xff) << 8) | (hdr[3] & 0xff);
+                if (len < 66 || len > 8 * 1024 * 1024 + 82)
+                    throw new IllegalStateException("record length broken: " + len);
+                byte[] fr = new byte[len];
+                for (int got = 0; got < len; ) {
+                    int n = cin.read(fr, got, len - got);
+                    if (n < 0) throw new IllegalStateException("truncated");
+                    got += n;
+                }
+                byte[] pt = WaxNative.openFileFrame(mirror, fr);
+                long[] info = WaxNative.lastFrame(mirror);
+                if (total < 0) {
+                    total = info[2];
+                    if (total < 1) throw new IllegalStateException("total broken");
+                } else if (info[2] != total) {
+                    throw new IllegalStateException("total mismatch");
+                }
+                if (info[1] != expectedIdx)
+                    throw new IllegalStateException("chunk out of order: " + info[1] + " != " + expectedIdx);
+                if (seenMeta == null) {
+                    int ml = ((pt[0] & 0xff) << 24) | ((pt[1] & 0xff) << 16) | ((pt[2] & 0xff) << 8) | (pt[3] & 0xff);
+                    if (ml < 1 || ml > pt.length - 4) throw new IllegalStateException("meta broken");
+                    String mj = new String(pt, 4, ml, "UTF-8");
+                    int start = 4 + ml;
+                    /* name + size out of the JSON, then trim by size */
+                    int q1 = mj.indexOf("\"size\":") + 7;
+                    int q2 = mj.indexOf('}', q1);
+                    remaining = Long.parseLong(mj.substring(q1, q2).trim());
+                    long take = Math.min((long) pt.length - start, remaining);
+                    /* write(buf, off, LEN) — keep byte-faithful to the
+                     * Kotlin decryptSwx source: a diverging "cleanup" here
+                     * once hid a real off/len bug from this very test. */
+                    plain.write(pt, start, (int) take);
+                    remaining -= take;
+                    written += take;
+                    seenMeta = mj;
+                } else {
+                    long take = Math.min((long) pt.length, remaining);
+                    if (take > 0) plain.write(pt, 0, (int) take);
+                    remaining -= take;
+                    written += take;
+                }
+                expectedIdx++;
+            }
+        } finally {
+            WaxNative.freeSession(mirror);
+        }
+        if (expectedIdx != total) throw new IllegalStateException("missing chunks");
+        if (remaining != 0) throw new IllegalStateException("data short by " + remaining);
+        check(written == fileLen, label + ": written " + written + " != " + fileLen);
+        check(java.util.Arrays.equals(plain.toByteArray(), fileData),
+              label + ": roundtrip bytes");
+
+        WaxNative.freeSession(sa);
+        WaxNative.freeSession(sb);
+        System.out.println("  (" + label + " ok: " + chunks + " chunks, " + container.length + " B container)");
+    }
+
     public static void main(String[] args) throws Exception {
         byte[] secret = "火漆配对暗号".getBytes("UTF-8");
 
@@ -263,6 +406,16 @@ public class JniSmoke {
 
         WaxNative.freeSession(a);
         WaxNative.freeSession(b);
+
+        /* full .swx container round-trips: multi-chunk (3 frames over the
+         * 8 MiB boundary) and single-chunk, plain and padded — the app's
+         * exact file path; the padded single-chunk case is where the final
+         * chunk blows up to the full 8 MiB bucket */
+        containerRoundtrip(secret, false, 20 * 1024 * 1024 + 12345, 3, "container plain");
+        containerRoundtrip(secret, true, 20 * 1024 * 1024 + 12345, 3, "container padded");
+        containerRoundtrip(secret, false, 12345, 1, "container single plain");
+        containerRoundtrip(secret, true, 12345, 1, "container single padded");
+
         System.out.println(failures == 0 ? "JNI SMOKE: ALL PASSED" : "JNI SMOKE: " + failures + " failure(s)");
         System.exit(failures == 0 ? 0 : 1);
     }

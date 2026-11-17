@@ -182,7 +182,7 @@ fun ChatScreen(
                 if (size < 0) {
                     size = resolver.openAssetFileDescriptor(uri, "r")?.use { it.length } ?: -1L
                 }
-                require(size >= 0) { "无法确定文件大小" }
+                require(size >= 0) { "SWX_E_META" }
                 val outFile = File(SessionManager.shareDir(context), "$name.swx")
                 withContext(Dispatchers.IO) {
                     resolver.openInputStream(uri)!!.use { i ->

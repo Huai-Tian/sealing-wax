@@ -492,7 +492,7 @@ object SessionManager {
      */
     fun peekSwxMeta(input: InputStream): FileMeta {
         require(handle != 0L) { "没有活跃会话" }
-        val frame = SwxReader(input).nextFrame() ?: error("空的 .swx 文件")
+        val frame = SwxReader(input).nextFrame() ?: error("SWX_E_EMPTY")
         val blob = WaxNative.exportState(handle)
         val scratch = WaxNative.importState(blob, 1, 0)
         val meta = try {
@@ -501,9 +501,11 @@ object SessionManager {
                 ((pt[1].toInt() and 0xff) shl 16) or
                 ((pt[2].toInt() and 0xff) shl 8) or
                 (pt[3].toInt() and 0xff)
-            require(metaLen in 1..pt.size - 4) { "元数据损坏" }
-            val mo = JSONObject(String(pt, 4, metaLen, Charsets.UTF_8))
-            FileMeta(mo.getString("name"), mo.getLong("size"))
+            require(metaLen in 1..pt.size - 4) { "SWX_E_META" }
+            runCatching {
+                val mo = JSONObject(String(pt, 4, metaLen, Charsets.UTF_8))
+                FileMeta(mo.getString("name"), mo.getLong("size"))
+            }.getOrElse { error("SWX_E_META") }
         } finally {
             WaxNative.freeSession(scratch)
         }
@@ -545,23 +547,26 @@ object SessionManager {
                 val info = WaxNative.lastFrame(scratch)
                 if (total < 0) {
                     total = info[2]
-                    require(total >= 1) { "分片数非法" }
+                    require(total >= 1) { "SWX_E_ORDER" }
                 } else if (info[2] != total) {
-                    error("总分片数不一致")
+                    error("SWX_E_ORDER")
                 }
-                if (info[1] != expectedIdx) error("分片乱序或缺失")
+                if (info[1] != expectedIdx) error("SWX_E_ORDER")
                 if (meta == null) {
                     val metaLen = ((pt[0].toInt() and 0xff) shl 24) or
                         ((pt[1].toInt() and 0xff) shl 16) or
                         ((pt[2].toInt() and 0xff) shl 8) or
                         (pt[3].toInt() and 0xff)
-                    require(metaLen in 1..pt.size - 4) { "元数据损坏" }
-                    val mo = JSONObject(String(pt, 4, metaLen, Charsets.UTF_8))
-                    val m = FileMeta(mo.getString("name"), mo.getLong("size"))
+                    require(metaLen in 1..pt.size - 4) { "SWX_E_META" }
+                    val m = runCatching {
+                        val mo = JSONObject(String(pt, 4, metaLen, Charsets.UTF_8))
+                        FileMeta(mo.getString("name"), mo.getLong("size"))
+                    }.getOrElse { error("SWX_E_META") }
                     val start = 4 + metaLen
                     remaining = m.size
                     val take = minOf((pt.size - start).toLong(), remaining)
-                    out.write(pt, start, (start + take).toInt())
+                    /* write(buf, off, LEN):len 是长度,不是结束偏移 */
+                    out.write(pt, start, take.toInt())
                     remaining -= take
                     written += take
                     meta = m
@@ -580,9 +585,9 @@ object SessionManager {
         } finally {
             WaxNative.freeSession(scratch)
         }
-        val m = meta ?: error("空的 .swx 文件")
-        require(expectedIdx == total) { "文件不完整(缺分片)" }
-        require(remaining == 0L) { "文件不完整(数据不足)" }
+        val m = meta ?: error("SWX_E_EMPTY")
+        require(expectedIdx == total) { "SWX_E_TRUNCATED" }
+        require(remaining == 0L) { "SWX_E_TRUNCATED" }
         saved?.let {
             if (it.ledger.none { e -> e.dir == DIR_RECEIVED && e.hash.contentEquals(hash) }) {
                 it.ledger.add(
@@ -601,7 +606,7 @@ object SessionManager {
         var got = 0
         while (got < want) {
             val n = input.read(buf, got, want - got)
-            if (n < 0) error("源文件比预期短")
+            if (n < 0) error("SWX_E_SRC_SHORT")
             got += n
         }
     }
@@ -630,9 +635,9 @@ private class SwxReader(private val input: InputStream) {
             ((p[1].toInt() and 0xff) shl 16) or
             ((p[2].toInt() and 0xff) shl 8) or
             (p[3].toInt() and 0xff)
-        if (len < 66 || len > 8 * 1024 * 1024 + 82) error("记录长度损坏")
+        if (len < 66 || len > 8 * 1024 * 1024 + 82) error("SWX_E_TRUNCATED")
         val frame = ByteArray(len)
-        if (!readFully(frame, len)) error("文件被截断")
+        if (!readFully(frame, len)) error("SWX_E_TRUNCATED")
         return frame
     }
 
