@@ -147,7 +147,9 @@ fun PublicSessionScreen(
                     value = reply,
                     onValueChange = { reply = it },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text(stringResource(R.string.public_paste_reply)) },
+                    /* 提示即「回复码」(文案修正):字段上下文自明,
+                     * 与加入会话屏的码卡标题同串(pair_reply_code) */
+                    label = { Text(stringResource(R.string.pair_reply_code)) },
                     singleLine = true,
                     trailingIcon = { ClearFieldIcon(reply) { reply = "" } },
                 )

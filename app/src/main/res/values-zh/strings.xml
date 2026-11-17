@@ -51,15 +51,13 @@
 
     <!-- 公共会话(§5):新建会话同一入口的子集;静态邀请码对所有
          知道暗号的客户有效 -->
-    <string name="pair_step1_public">第一步:心中想好一个暗号</string>
     <string name="public_switch">公共会话</string>
     <string name="public_name_label">名称</string>
     <string name="public_create_btn">创建公共会话</string>
     <string name="public_static_code">静态邀请码</string>
-    <string name="public_paste_reply">粘贴客户回复码</string>
     <string name="public_reply_crypto">暗号不一致</string>
     <string name="public_delete_title">删除公共会话</string>
-    <string name="public_delete_text">删除后新客户无法再配对;已建立的会话不受任何影响;简介中的静态邀请码将永久失效,请自行移除。</string>
+    <string name="public_delete_text">删除后其他人无法再根据此公共会话的静态邀请码与你配对,已建立的会话不受影响。</string>
 
     <!-- chat: shell -->
     <string name="chat_default_title">会话</string>

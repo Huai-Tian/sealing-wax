@@ -104,15 +104,15 @@ fun NewSessionScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             if (invite == null) {
-                Text(
-                    /* 公共态下行头换词(所有者定稿):没有"对方",只有门禁暗号 */
-                    stringResource(
-                        if (publicMode) R.string.pair_step1_public
-                        else R.string.pair_step1,
-                    ),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                )
+                /* 行头只属普通配对(文案修正:公共态无步骤文案——
+                 * 名称/暗号字段与开关自明,行头是多余仪式) */
+                if (!publicMode) {
+                    Text(
+                        stringResource(R.string.pair_step1),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
                 if (publicMode) {
                     OutlinedTextField(
                         value = name,
