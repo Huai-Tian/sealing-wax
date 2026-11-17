@@ -501,6 +501,21 @@ trademark_note: "发布前做类别 9/42 商标检索;英文表述永远用'两�
 
 ### 2.0-draft 之后(实现期变更)
 
+- **2026-11 输入字数上限 100,000——autofill 物理边界护栏**(所有者
+  裁决"与 autofill 同一限制,仅此一点"):根因(真机 logcat)=Compose
+  语义树每次文本变化把输入框全文经 Binder 上报系统 autofill 服务
+  (updateSession),parcel 随文本线性膨胀,超 512KB 即
+  TransactionTooLargeException 闪退(parcel 535200B 崩,
+  Parcel.writeString 为 UTF-16 ≈2B/字符,ROM 结构开销最坏按 3B 估)。
+  上限 100,000 字符:最坏模型 parcel ~300KB,余量 1.7×;覆盖接收侧
+  一切现实场景(主流 IM 单条 ≤12K,逐条粘贴输入峰值远低于此;A 端
+  2 万字明文 parcel ≤60KB)。实现:对话屏 onValueChange 截断保留
+  前段+触顶提示一次(input_limit_toast 双语)+回落后复位。**遗留
+  边界(接受)**:A 端一次粘贴超长消息被 IM 截断(微信单条 ~5000 字)
+  时,B 复制残缺消息仍静默(E_FORMAT)——分条发送则完全无碍;
+  "一次粘贴即可"文案承诺仅在 IM 支持长消息时成立,所有者已另行
+  精简(f540c81)。纯平台层,KPI 不受影响
+
 - **2026-11 [文件] 历史气泡**(所有者指示;问询裁决:收发对称+带大小):
   收/发完成在对话流产生「[文件] 名称 (大小)」气泡。载体=账本而非
   HistoryEntry(密文帧载体)——UiMessage 增 fileHash 标志(非空=文件

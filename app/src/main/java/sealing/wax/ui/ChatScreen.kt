@@ -98,6 +98,16 @@ import java.util.Date
  *  关闭时分割 = 单片上限(非混淆,不受本表影响)。须为 4 的倍数。 */
 private val PAD_THRESHOLDS = intArrayOf(200, 364, 664, 1208, 2200, 4000)
 
+/** 输入字数上限 = autofill 物理边界护栏(2026-11 所有者裁决,详见 §15):
+ *  Compose 语义树每次文本变化都把输入框全文经 Binder 上报系统
+ *  autofill 服务(updateSession),parcel 随文本线性膨胀,超 512KB 即
+ *  TransactionTooLargeException 闪退(真机 logcat:parcel 535200B 崩,
+ *  Parcel.writeString 为 UTF-16 ≈2B/字符,ROM 结构开销最坏按 3B 估)。
+ *  100,000 字符 → 最坏模型 parcel ~300KB,余量 1.7×;覆盖接收侧一切
+ *  现实场景(主流 IM 单条 ≤12K,逐条粘贴的输入峰值远低于此)。超出
+ *  截断保留前段,触顶提示一次,回落后复位。 */
+private const val INPUT_CHAR_LIMIT = 100_000
+
 /** 对话屏:五个动作全部一键化(§5),KPI = 平文 + 1 步。 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -124,6 +134,7 @@ fun ChatScreen(
     var busy by remember { mutableStateOf<String?>(null) }
     var pendingSwx by remember { mutableStateOf<Uri?>(null) }
     var swxHash by remember { mutableStateOf<ByteArray?>(null) }
+    var limitNotified by remember { mutableStateOf(false) }
 
     val sas = SessionManager.sas
 
@@ -450,7 +461,26 @@ fun ChatScreen(
                     ) {
                         OutlinedTextField(
                             value = input,
-                            onValueChange = { input = it },
+                            onValueChange = { v ->
+                                /* 上限截断(autofill parcel 闪退护栏,常量
+                                 * 注释):超出保留前段,触顶提示一次,回落后复位 */
+                                if (v.length <= INPUT_CHAR_LIMIT) {
+                                    input = v
+                                    limitNotified = false
+                                } else {
+                                    input = v.take(INPUT_CHAR_LIMIT)
+                                    if (!limitNotified) {
+                                        limitNotified = true
+                                        Toast.makeText(
+                                            context,
+                                            context.getString(
+                                                R.string.input_limit_toast, INPUT_CHAR_LIMIT,
+                                            ),
+                                            Toast.LENGTH_SHORT,
+                                        ).show()
+                                    }
+                                }
+                            },
                             modifier = Modifier.weight(0.8f),
                             label = { Text(stringResource(R.string.input_label)) },
                             minLines = 1,
