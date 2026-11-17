@@ -310,6 +310,18 @@ private fun App() {
                     chatSaved = false
                     dest = Dest.Chat
                 },
+                /* 点题改名:直写信封;首页回读拿新名(运营打磨批) */
+                onRename = { newName ->
+                    scope.launch {
+                        withContext(Dispatchers.IO) {
+                            val loaded = Persistence.readPublicSession(context, pub.id)
+                            if (loaded != null) {
+                                loaded.name = newName
+                                Persistence.savePublicSession(context, loaded)
+                            }
+                        }
+                    }
+                },
             )
         }
 

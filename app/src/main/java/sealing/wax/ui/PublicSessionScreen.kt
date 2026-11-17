@@ -12,6 +12,7 @@
 package sealing.wax.ui
 
 import android.util.Log
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -59,6 +60,7 @@ fun PublicSessionScreen(
     name: String,
     onBack: () -> Unit,
     onClientPaired: () -> Unit,
+    onRename: (String) -> Unit,
 ) {
     val clipboard = LocalClipboardManager.current
     val context = LocalContext.current
@@ -66,6 +68,10 @@ fun PublicSessionScreen(
     var loadError by remember(id) { mutableStateOf<String?>(null) }
     var reply by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
+    /* 点题改名(与对话屏同款手势,运营打磨批):对象永在,标题恒可改;
+     * 本地即时更新,信封由 onRename 直写 */
+    var title by remember(id) { mutableStateOf(name) }
+    var renameOpen by remember { mutableStateOf(false) }
 
     LaunchedEffect(id) {
         runCatching { SessionManager.armPublicSession(context, id) }
@@ -102,7 +108,10 @@ fun PublicSessionScreen(
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text(name) },
+                title = {
+                    /* 点题改名:公共会话对象永在,标题恒可改 */
+                    Text(title, modifier = Modifier.clickable { renameOpen = true })
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
@@ -157,5 +166,17 @@ fun PublicSessionScreen(
             }
             Spacer(Modifier.height(32.dp))
         }
+    }
+
+    if (renameOpen) {
+        RenameSessionDialog(
+            initialName = title,
+            onDismiss = { renameOpen = false },
+            onConfirm = {
+                title = it
+                onRename(it)
+                renameOpen = false
+            },
+        )
     }
 }

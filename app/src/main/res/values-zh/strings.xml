@@ -16,7 +16,7 @@
     <string name="home_fab_cd">新建或加入会话</string>
     <string name="home_loading">正在读取会话…</string>
     <string name="home_load_failed">会话在,但此刻读不出来。\n可能原因:系统密钥库未就绪或瞬时错误。</string>
-    <string name="home_empty">还没有保存的会话。点右下角 + 开始。\n保存与否,每次退出对话屏时再决定。</string>
+    <string name="home_empty">还没有保存的会话，点击右下角 + 号开始。</string>
     <string name="home_last_used">最近使用 %1$s</string>
     <string name="home_delete_title">删除会话</string>
     <string name="home_delete_text">钥匙与历史同删,不可恢复。\n删除后对方发来的旧密文将永远无法解开。</string>
@@ -52,6 +52,7 @@
     <!-- 公共会话(§5):新建会话同一入口的子集;静态邀请码对所有
          知道暗号的客户有效 -->
     <string name="public_switch">公共会话</string>
+    <string name="public_unnamed">未命名公共会话</string>
     <string name="public_name_label">名称</string>
     <string name="public_create_btn">创建公共会话</string>
     <string name="public_static_code">静态邀请码</string>

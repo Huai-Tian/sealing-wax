@@ -17,7 +17,7 @@
     <string name="home_fab_cd">New or join a session</string>
     <string name="home_loading">Reading sessions…</string>
     <string name="home_load_failed">Sessions exist, but can\'t be read right now.\nPossible cause: system keystore not ready, or a transient error.</string>
-    <string name="home_empty">No saved sessions yet. Tap + in the bottom-right corner to start.\nWhether to save is decided each time you leave the chat.</string>
+    <string name="home_empty">No saved sessions yet — tap the + at the bottom right to start.</string>
     <string name="home_last_used">Last used %1$s</string>
     <string name="home_delete_title">Delete session</string>
     <string name="home_delete_text">Key and history are deleted together; this cannot be undone.\nAfter deletion, old ciphertext the peer sends can never be opened again.</string>
@@ -54,6 +54,7 @@
          New session; the static code pairs with every client who knows
          the passphrase -->
     <string name="public_switch">Public session</string>
+    <string name="public_unnamed">Unnamed public session</string>
     <string name="public_name_label">Name</string>
     <string name="public_create_btn">Create public session</string>
     <string name="public_static_code">Static invite code</string>

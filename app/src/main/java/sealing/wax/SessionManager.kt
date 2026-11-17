@@ -163,7 +163,7 @@ object SessionManager {
             ctx(),
             PublicSession(
                 id = UUID.randomUUID().toString().replace("-", "").substring(0, 16),
-                name = name.ifBlank { str(R.string.unnamed_session) },
+                name = name.ifBlank { str(R.string.public_unnamed) },
                 gateSeed = seed,
                 gateSecret = secret.copyOf(),
                 createdMs = now,
