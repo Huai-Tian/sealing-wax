@@ -38,6 +38,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
@@ -64,6 +65,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -71,6 +73,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -435,13 +438,26 @@ fun ChatScreen(
                 .imePadding(),
         ) {
             /* transcript */
+            /* 点空白清除选择:Compose 无公开的 clearSelection API——
+             * SelectionContainer 的选择随组合销毁而清。点列表空白
+             * (或气泡卡片非文字区)→ epoch++ → 各气泡的选择容器经
+             * key 强制重组,选择自然清空;文本上的 tap 被选择机制
+             * 消费,不会冒泡到此处,拖选不受影响。 */
+            var selectionEpoch by remember { mutableStateOf(0) }
             LazyColumn(
                 state = listState,
-                modifier = Modifier.weight(1f).fillMaxWidth(),
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .pointerInput(Unit) {
+                        detectTapGestures { selectionEpoch++ }
+                    },
                 contentPadding = PaddingValues(12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                items(SessionManager.messages) { m -> MessageBubble(m) }
+                items(SessionManager.messages) { m ->
+                    MessageBubble(m, selectionEpoch)
+                }
                 item { Spacer(Modifier.height(4.dp)) }
             }
 
@@ -727,7 +743,7 @@ fun ChatScreen(
 }
 
 @Composable
-private fun MessageBubble(m: UiMessage) {
+private fun MessageBubble(m: UiMessage, selectionEpoch: Int) {
     val mine = m.dir == DIR_SENT
     Box(
         Modifier.fillMaxWidth(),
@@ -743,11 +759,13 @@ private fun MessageBubble(m: UiMessage) {
             Column(Modifier.padding(10.dp)) {
                 /* 长按选择/复制正文:SelectionContainer 逐气泡包裹——
                  * 整列合包在 LazyColumn 复用下会丢选择状态;时间戳与
-                 * 分片徽标留在容器外,复制不带时间。发送侧气泡的正文是
-                 * 密文片(重粘场景),接收侧是明文——与既有"复制到 IM"
-                 * 同一剪贴板信任边界,无新增暴露面。 */
-                SelectionContainer {
-                    Text(m.text, style = MaterialTheme.typography.bodyMedium)
+                 * 分片徽标留在容器外,复制不带时间。收发两侧正文均为
+                 * 明文(UiMessage.text;密文片 pieces 只作徽标与持久化),
+                 * 选择复制走系统剪贴板,与既有"复制到 IM"同一信任边界。 */
+                key(selectionEpoch) {
+                    SelectionContainer {
+                        Text(m.text, style = MaterialTheme.typography.bodyMedium)
+                    }
                 }
                 Text(
                     DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(m.ts)) +
