@@ -104,9 +104,12 @@ a time — but a shared memory still beats a short word.
 
 ## Getting the app
 
+Download from [Releases](../../releases/latest): per-ABI APKs plus a
+`universal` build containing all four ABIs — pick that one if unsure.
+Android 7.0+.
+
 Build from source: clone the repository and run `./gradlew assembleDebug`
-(Android SDK required); CI builds the APK on every push. Prebuilt releases
-will appear once v1 is ready.
+(Android SDK required); CI also builds the APK on every push.
 
 ## ⚠️ Disclaimer
 

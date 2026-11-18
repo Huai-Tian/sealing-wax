@@ -11,8 +11,8 @@
   使用 GPG 公钥
   `125F 7101 1717 0318 A318  F9C4 7FA3 DE0E 6B42 E01A`（Huai-Tian (Feedback)）
 
-**What to include / 请附**：受影响的 commit（暂无预构建 Releases，请附 commit
-SHA 或构建来源）、复现步骤、影响评估；若涉及线上协议，注明与
+**What to include / 请附**：受影响的版本（见 Releases）或 commit SHA、复现
+步骤、影响评估；若涉及线上协议，注明与
 [docs/wire-spec.md](docs/wire-spec.md) 的偏差章节。
 
 ## Scope / 范围

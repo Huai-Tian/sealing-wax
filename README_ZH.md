@@ -82,8 +82,11 @@
 
 ## 获取应用
 
+从 [Releases](../../releases/latest) 下载：提供全 ABI 分包与 `universal`
+通用包（含全部四种 ABI，拿不准装它），需 Android 7.0+。
+
 从源码构建：克隆仓库后运行 `./gradlew assembleDebug`（需 Android SDK）；
-CI 每次推送都会出 APK。预构建 Releases 将在 v1 就绪后提供。
+CI 每次推送也会产出 APK。
 
 ## ⚠️ 免责声明
 
