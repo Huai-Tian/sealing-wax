@@ -4,6 +4,9 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   # §10: 核心 host 可测——双端互操作、SAS、篡改/截断、重放、nonce 唯一性、
   # destroy 清零,全部机器验证;外加 JNI 桥的宿主 JVM 冒烟。
