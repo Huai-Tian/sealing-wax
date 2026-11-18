@@ -39,6 +39,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
@@ -740,7 +741,14 @@ private fun MessageBubble(m: UiMessage) {
             ),
         ) {
             Column(Modifier.padding(10.dp)) {
-                Text(m.text, style = MaterialTheme.typography.bodyMedium)
+                /* 长按选择/复制正文:SelectionContainer 逐气泡包裹——
+                 * 整列合包在 LazyColumn 复用下会丢选择状态;时间戳与
+                 * 分片徽标留在容器外,复制不带时间。发送侧气泡的正文是
+                 * 密文片(重粘场景),接收侧是明文——与既有"复制到 IM"
+                 * 同一剪贴板信任边界,无新增暴露面。 */
+                SelectionContainer {
+                    Text(m.text, style = MaterialTheme.typography.bodyMedium)
+                }
                 Text(
                     DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(m.ts)) +
                         if (m.pieces.size > 1) {
