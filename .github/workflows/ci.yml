@@ -48,15 +48,19 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleDebug assembleRelease --no-daemon
 
+      # splits 开启后单文件名带 ABI 段;dex 审计以 universal 为准
+      # (它与各分片同源,dex 完全一致,仅多打包 .so)
       - name: Release dex audit
-        run: python3 tools/dex_audit.py app/build/outputs/apk/release/app-release-unsigned.apk
+        run: python3 tools/dex_audit.py app/build/outputs/apk/release/app-universal-release-unsigned.apk
 
       - uses: actions/upload-artifact@v4
         with:
           name: app-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: app/build/outputs/apk/debug/app-universal-debug.apk
 
+      # 全 ABI 分包一个不落:glob 匹配四个 ABI 分片 + universal 通用包,
+      # 增删 ABI 时自动跟随,无需回改此处
       - uses: actions/upload-artifact@v4
         with:
-          name: app-release-unsigned-apk
-          path: app/build/outputs/apk/release/app-release-unsigned.apk
+          name: app-release-apks
+          path: app/build/outputs/apk/release/app-*-release-unsigned.apk

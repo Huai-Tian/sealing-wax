@@ -62,6 +62,18 @@ android {
             version = "3.22.1"
         }
     }
+
+    // ABI 分包:assemble 各产出独立 APK + universal 通用包(文件名带 ABI 段,
+    // CI 与发布页路径随之改变)。侧载分发无需按 ABI 拆 versionCode——那是
+    // Play 上架的要求,届时再加。
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "armeabi-v7a", "x86_64", "x86")
+            isUniversalApk = true
+        }
+    }
 }
 
 dependencies {
