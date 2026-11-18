@@ -1,0 +1,81 @@
+# CodeQL 高级设置(advanced setup)——替代 default setup 的 autobuild。
+#
+# 为什么不用 default setup:其 Java autobuild 在 ubuntu-latest 上约 60 秒即失败
+# (Exit status 1 from autobuild.sh),原因见提交说明。本项目的技术栈过于前沿:
+# Gradle 9.6 + gradle-daemon-jvm.properties 锁 JDK 25 + AGP 9.5,autobuild 的
+# 内置 Gradle→Java 兼容表甚至不认识 Gradle 9.x。此处改用 manual build mode,
+# 直接复用 apk 作业已验证的构建方式(setup-java 17 + wrapper 自举 daemon JDK 25)。
+#
+# 语言覆盖与 default setup 自动选择的保持一致(java-kotlin/c-cpp/python/actions),
+# 其中 c-cpp 在 default setup 下本是空扫描(autobuild 不会跑 Gradle 里的
+# externalNativeBuild),这里经由被 trace 的 gradle 构建获得真实覆盖。
+#
+# 启用前须关闭 default setup:Settings → Code security → Code scanning →
+# Default setup → Disable(两套并存会冲突)。
+
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '30 7 * * 2'
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      # 上传 SARIF 结果必需
+      security-events: write
+      # 拉取(含私有的)CodeQL 查询包
+      packages: read
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: java-kotlin
+            build-mode: manual
+          - language: c-cpp
+            build-mode: manual
+          - language: python
+          - language: actions
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 与 ci.yml 的 apk 作业完全一致的构建环境;daemon JVM criteria(25)由
+      # wrapper 自动补齐。不要改动为其它 JDK,除非同时更新
+      # gradle/gradle-daemon-jvm.properties。
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+
+      # manual build mode:构建过程被 CodeQL trace,Kotlin/Java 编译与
+      # native(4 ABI)编译均被抽取。单 debug 变体足够覆盖全部源码。
+      - name: Build app
+        if: matrix.build-mode == 'manual'
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:${{ matrix.language }}"
